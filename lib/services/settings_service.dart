@@ -126,4 +126,9 @@ class SettingsService extends ChangeNotifier {
     _settings.minimizeToTray = minimize;
     await save();
   }
+
+  Future<void> updateLastSelectedNodeName(String nodeName) async {
+    _settings.lastSelectedNodeName = nodeName;
+    await save();
+  }
 }

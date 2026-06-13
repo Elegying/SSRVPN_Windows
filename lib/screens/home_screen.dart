@@ -60,16 +60,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
     setState(() => _isConnecting = true);
     try {
+      final nodes = List<ProxyNode>.from(subService.allNodes);
+      final preferredNode = _resolveDefaultNode(
+        nodes,
+        settingsService.settings.lastSelectedNodeName,
+      );
       clashService.updateSettings(settingsService.settings);
-      final config =
-          clashService.generateClashConfig(rawYaml, settingsService.settings);
+      final config = clashService.generateClashConfig(
+        rawYaml,
+        settingsService.settings,
+        preferredNodeName: preferredNode?.name,
+      );
       await clashService.stop();
       await clashService.writeConfig(config);
       final success = await clashService.start();
+      if (success && preferredNode != null) {
+        final switched =
+            await clashService.switchProxy('PROXY', preferredNode.name);
+        if (switched) await _rememberSelectedNode(preferredNode);
+      }
       if (mounted && !_disposed) {
         setState(() {
           _isConnected = success;
           _isConnecting = false;
+          _nodes = nodes;
+          _selectedNode = success ? preferredNode : null;
         });
       }
     } catch (e) {
@@ -93,11 +108,19 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadInitialData() async {
     final subService = context.read<SubscriptionService>();
     final clashService = context.read<ClashService>();
+    final settingsService = context.read<SettingsService>();
     _clashService = clashService;
     if (subService.allNodes.isNotEmpty) {
+      final nodes = List<ProxyNode>.from(subService.allNodes);
       setState(() {
-        _nodes = List.from(subService.allNodes);
+        _nodes = nodes;
         _lastRevision = subService.revision;
+        if (clashService.isRunning) {
+          _selectedNode = _resolveDefaultNode(
+            nodes,
+            settingsService.settings.lastSelectedNodeName,
+          );
+        }
       });
     }
     if (clashService.isRunning) setState(() => _isConnected = true);
@@ -152,17 +175,24 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       try {
         clashService.updateSettings(settingsService.settings);
-        final config =
-            clashService.generateClashConfig(rawYaml, settingsService.settings);
+        final nodes = List<ProxyNode>.from(subService.allNodes);
+        final autoSelect = _resolveDefaultNode(
+          nodes,
+          settingsService.settings.lastSelectedNodeName,
+        );
+        final config = clashService.generateClashConfig(
+          rawYaml,
+          settingsService.settings,
+          preferredNodeName: autoSelect?.name,
+        );
         await clashService.writeConfig(config);
         final success = await clashService.start();
         if (!mounted) return;
         if (success) {
-          final nodes = List<ProxyNode>.from(subService.allNodes);
-          ProxyNode? autoSelect;
-          if (nodes.isNotEmpty) {
-            autoSelect = nodes.first;
-            await clashService.switchProxy('PROXY', autoSelect.name);
+          if (autoSelect != null) {
+            final switched =
+                await clashService.switchProxy('PROXY', autoSelect.name);
+            if (switched) await _rememberSelectedNode(autoSelect);
           }
           setState(() {
             _isConnected = true;
@@ -246,13 +276,45 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     final ok =
         await context.read<ClashService>().switchProxy('PROXY', node.name);
+    if (ok) {
+      await _rememberSelectedNode(node);
+      if (mounted) setState(() => _selectedNode = node);
+    }
     if (mounted) {
-      if (ok) setState(() => _selectedNode = node);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(ok ? '已切换: ${node.name}' : '切换失败: ${node.name}'),
             duration: const Duration(seconds: 1)),
       );
+    }
+  }
+
+  ProxyNode? _resolveDefaultNode(
+    List<ProxyNode> nodes,
+    String? rememberedNodeName,
+  ) {
+    if (nodes.isEmpty) return null;
+    if (rememberedNodeName != null && rememberedNodeName.isNotEmpty) {
+      for (final node in nodes) {
+        if (node.name == rememberedNodeName) return node;
+      }
+    }
+    return nodes.first;
+  }
+
+  Future<void> _rememberSelectedNode(ProxyNode node) async {
+    final settingsService = context.read<SettingsService>();
+    final clashService = context.read<ClashService>();
+    final subscriptionService = context.read<SubscriptionService>();
+    await settingsService.updateLastSelectedNodeName(node.name);
+    final rawYaml = subscriptionService.rawYaml;
+    if (rawYaml != null && rawYaml.isNotEmpty) {
+      final config = clashService.generateClashConfig(
+        rawYaml,
+        settingsService.settings,
+        preferredNodeName: node.name,
+      );
+      await clashService.writeConfig(config);
     }
   }
 

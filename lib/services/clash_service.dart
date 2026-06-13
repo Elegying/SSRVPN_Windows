@@ -200,7 +200,11 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
   String _quote(String name) => "'${name.replaceAll("'", "''")}'";
 
   /// 生成 Clash 配置
-  String generateClashConfig(String rawYaml, AppSettings settings) {
+  String generateClashConfig(
+    String rawYaml,
+    AppSettings settings, {
+    String? preferredNodeName,
+  }) {
     final proxyNames = _extractProxyNames(rawYaml);
     final proxiesText = _extractSection(rawYaml, 'proxies');
     if (proxyNames.isEmpty || proxiesText.isEmpty) {
@@ -208,6 +212,12 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
     }
 
     // 检查 MMDB
+    final selectedProxyNames = List<String>.from(proxyNames);
+    if (preferredNodeName != null &&
+        selectedProxyNames.remove(preferredNodeName)) {
+      selectedProxyNames.insert(0, preferredNodeName);
+    }
+
     final mmdbExists = (() {
       try {
         final m = File('$_configDir${Platform.pathSeparator}country.mmdb');
@@ -295,7 +305,7 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
     result.writeln('  - name: PROXY');
     result.writeln('    type: select');
     result.writeln('    proxies:');
-    for (final name in proxyNames) {
+    for (final name in selectedProxyNames) {
       result.writeln("      - ${_quote(name)}");
     }
     result.writeln('  - name: 自动选择');

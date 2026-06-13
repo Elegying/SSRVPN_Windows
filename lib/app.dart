@@ -87,12 +87,22 @@ class _SSRVpnAppState extends State<SSRVpnApp> with WindowListener {
         } else {
           final rawYaml = _subscriptionService?.rawYaml;
           if (rawYaml != null && rawYaml.trim().isNotEmpty) {
+            final preferredNodeName = _defaultNodeName();
             final config = _clashService!.generateClashConfig(
               rawYaml,
               _settingsService!.settings,
+              preferredNodeName: preferredNodeName,
             );
             await _clashService!.writeConfig(config);
-            await _clashService!.start();
+            final started = await _clashService!.start();
+            if (started && preferredNodeName != null) {
+              final switched = await _clashService!
+                  .switchProxy('PROXY', preferredNodeName);
+              if (switched) {
+                await _settingsService!
+                    .updateLastSelectedNodeName(preferredNodeName);
+              }
+            }
           }
         }
       } catch (e) {
@@ -104,6 +114,18 @@ class _SSRVpnAppState extends State<SSRVpnApp> with WindowListener {
     _trayManager.isConnected = () => _clashService?.isRunning ?? false;
 
     await _trayManager.init();
+  }
+
+  String? _defaultNodeName() {
+    final nodes = _subscriptionService?.allNodes ?? const [];
+    if (nodes.isEmpty) return null;
+    final remembered = _settingsService?.settings.lastSelectedNodeName;
+    if (remembered != null &&
+        remembered.isNotEmpty &&
+        nodes.any((node) => node.name == remembered)) {
+      return remembered;
+    }
+    return nodes.first.name;
   }
 
   void _handleCoreStatusChanged() {

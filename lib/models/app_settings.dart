@@ -22,6 +22,7 @@ class AppSettings {
 
   // 延迟测试
   String latencyTestUrl;
+  String? lastSelectedNodeName;
   int latencyTestTimeout; // 毫秒
 
   AppSettings({
@@ -36,6 +37,7 @@ class AppSettings {
     this.startWithWindows = false,
     this.darkMode = true,
     this.latencyTestUrl = 'http://www.gstatic.com/generate_204',
+    this.lastSelectedNodeName,
     this.latencyTestTimeout = 5000,
   });
 
@@ -51,6 +53,7 @@ class AppSettings {
         'startWithWindows': startWithWindows,
         'darkMode': darkMode,
         'latencyTestUrl': latencyTestUrl,
+        'lastSelectedNodeName': lastSelectedNodeName,
         'latencyTestTimeout': latencyTestTimeout,
       };
 
@@ -65,6 +68,7 @@ class AppSettings {
         minimizeToTray: json['minimizeToTray'] as bool? ?? true,
         startWithWindows: json['startWithWindows'] as bool? ?? false,
         darkMode: json['darkMode'] as bool? ?? true,
+        lastSelectedNodeName: json['lastSelectedNodeName'] as String?,
         latencyTestUrl: json['latencyTestUrl'] as String? ??
             'http://www.gstatic.com/generate_204',
         latencyTestTimeout: _parseTimeout(json['latencyTestTimeout'], 5000),

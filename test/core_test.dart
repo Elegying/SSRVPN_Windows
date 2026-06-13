@@ -19,6 +19,7 @@ void main() {
       expect(settings.socksPort, 1080);
       expect(settings.apiPort, 9090);
       expect(settings.latencyTestTimeout, 5000);
+      expect(settings.lastSelectedNodeName, isNull);
     });
   });
 
@@ -48,6 +49,32 @@ proxies:
       expect(
           parsed['proxy-groups'][1]['url'], 'https://example.com/generate_204');
       expect(parsed['proxies'], hasLength(1));
+    });
+
+    test('puts the remembered node first in the PROXY group', () {
+      final config = ClashService().generateClashConfig(
+        '''
+proxies:
+  - name: First
+    type: ss
+    server: 127.0.0.1
+    port: 1001
+    cipher: aes-128-gcm
+    password: test
+  - name: Second
+    type: ss
+    server: 127.0.0.1
+    port: 1002
+    cipher: aes-128-gcm
+    password: test
+''',
+        AppSettings(lastSelectedNodeName: 'Second'),
+        preferredNodeName: 'Second',
+      );
+
+      final parsed = loadYaml(config) as YamlMap;
+      expect(parsed['proxy-groups'][0]['proxies'], ['Second', 'First']);
+      expect(parsed['proxy-groups'][1]['proxies'], ['First', 'Second']);
     });
   });
 
