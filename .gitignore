@@ -57,3 +57,6 @@ flutter/ephemeral/
 
 # Windows build
 build/
+
+# NSConflict files
+*NSConflict*
