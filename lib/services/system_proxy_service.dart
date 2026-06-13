@@ -1,0 +1,232 @@
+import 'dart:convert';
+import 'dart:io';
+
+/// Manages the Windows system proxy while preserving the user's prior values.
+class SystemProxyService {
+  static final SystemProxyService _instance = SystemProxyService._();
+  factory SystemProxyService() => _instance;
+  SystemProxyService._();
+
+  bool _proxyEnabled = false;
+  bool _ownsProxy = false;
+  bool _recoveryPending = false;
+  String? _statePath;
+  _ProxySnapshot? _previousProxy;
+
+  bool get isProxyEnabled => _proxyEnabled;
+
+  /// Restores proxy settings left behind by an abnormal previous shutdown.
+  Future<void> initialize(String dataDir) async {
+    if (!Platform.isWindows) return;
+    _statePath = '$dataDir${Platform.pathSeparator}system_proxy_backup.json';
+    final backupFile = File(_statePath!);
+    if (!await backupFile.exists()) return;
+
+    try {
+      final data =
+          jsonDecode(await backupFile.readAsString()) as Map<String, dynamic>;
+      final snapshot = _ProxySnapshot.fromJson(data);
+      if (await _restoreSnapshot(snapshot)) {
+        await backupFile.delete();
+        _recoveryPending = false;
+      } else {
+        _recoveryPending = true;
+      }
+    } catch (_) {
+      // Keep the backup for a future retry instead of deleting recovery data.
+      _recoveryPending = true;
+    }
+  }
+
+  Future<bool> setSystemProxy(String host, int port) async {
+    if (!Platform.isWindows) return false;
+    if (_recoveryPending) return false;
+    if (!_isValidHost(host) || port < 1 || port > 65535) return false;
+
+    try {
+      if (!_ownsProxy) {
+        final snapshot = await _readCurrentProxy();
+        if (snapshot == null) return false;
+        await _writeBackup(snapshot);
+        _previousProxy = snapshot;
+      }
+
+      final proxyServer = '$host:$port';
+      final script = '''
+\$regPath = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings'
+Set-ItemProperty -Path \$regPath -Name ProxyEnable -Type DWord -Value 1
+Set-ItemProperty -Path \$regPath -Name ProxyServer -Type String -Value '$proxyServer'
+Set-ItemProperty -Path \$regPath -Name ProxyOverride -Type String -Value '<local>;localhost;127.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.20.*;172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;172.28.*;172.29.*;172.30.*;172.31.*;192.168.*'
+${_notifyWinInetScript()}
+''';
+
+      final result = await _runPowerShell(script);
+      if (result.exitCode != 0) {
+        await _restoreSnapshot(_previousProxy!);
+        await _deleteBackup();
+        _previousProxy = null;
+        return false;
+      }
+
+      _ownsProxy = true;
+      _proxyEnabled = true;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Restores the values captured before SSRVPN enabled its proxy.
+  Future<bool> clearSystemProxy() async {
+    if (!Platform.isWindows) return false;
+    if (!_ownsProxy) {
+      _proxyEnabled = false;
+      return true;
+    }
+
+    final snapshot = _previousProxy;
+    if (snapshot == null) return false;
+
+    try {
+      if (!await _restoreSnapshot(snapshot)) return false;
+      _ownsProxy = false;
+      _proxyEnabled = false;
+      _recoveryPending = false;
+      _previousProxy = null;
+
+      await _deleteBackup();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool _isValidHost(String host) => RegExp(r'^[A-Za-z0-9.-]+$').hasMatch(host);
+
+  Future<_ProxySnapshot?> _readCurrentProxy() async {
+    const script = r'''
+$regPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+$item = Get-ItemProperty -Path $regPath
+[pscustomobject]@{
+  proxyEnable = if ($null -eq $item.ProxyEnable) { 0 } else { [int]$item.ProxyEnable }
+  hasProxyServer = $null -ne $item.PSObject.Properties['ProxyServer']
+  proxyServer = [string]$item.ProxyServer
+  hasProxyOverride = $null -ne $item.PSObject.Properties['ProxyOverride']
+  proxyOverride = [string]$item.ProxyOverride
+} | ConvertTo-Json -Compress
+''';
+    final result = await _runPowerShell(script);
+    if (result.exitCode != 0) return null;
+
+    final output = result.stdout.toString().trim();
+    if (output.isEmpty) return null;
+    return _ProxySnapshot.fromJson(
+      jsonDecode(output) as Map<String, dynamic>,
+    );
+  }
+
+  Future<bool> _restoreSnapshot(_ProxySnapshot snapshot) async {
+    final server = base64Encode(utf8.encode(snapshot.proxyServer));
+    final override = base64Encode(utf8.encode(snapshot.proxyOverride));
+    final script = '''
+\$regPath = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings'
+Set-ItemProperty -Path \$regPath -Name ProxyEnable -Type DWord -Value ${snapshot.proxyEnable}
+if (${snapshot.hasProxyServer ? r'$true' : r'$false'}) {
+  \$value = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$server'))
+  Set-ItemProperty -Path \$regPath -Name ProxyServer -Type String -Value \$value
+} else {
+  Remove-ItemProperty -Path \$regPath -Name ProxyServer -ErrorAction SilentlyContinue
+}
+if (${snapshot.hasProxyOverride ? r'$true' : r'$false'}) {
+  \$value = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$override'))
+  Set-ItemProperty -Path \$regPath -Name ProxyOverride -Type String -Value \$value
+} else {
+  Remove-ItemProperty -Path \$regPath -Name ProxyOverride -ErrorAction SilentlyContinue
+}
+${_notifyWinInetScript()}
+''';
+    final result = await _runPowerShell(script);
+    return result.exitCode == 0;
+  }
+
+  Future<void> _writeBackup(_ProxySnapshot snapshot) async {
+    final statePath = _statePath;
+    if (statePath == null) {
+      throw StateError('SystemProxyService has not been initialized');
+    }
+    final file = File(statePath);
+    await file.parent.create(recursive: true);
+    final temp = File('$statePath.tmp');
+    await temp.writeAsString(jsonEncode(snapshot.toJson()), flush: true);
+    await temp.rename(statePath);
+  }
+
+  Future<void> _deleteBackup() async {
+    final statePath = _statePath;
+    if (statePath == null) return;
+    final backupFile = File(statePath);
+    if (await backupFile.exists()) await backupFile.delete();
+  }
+
+  Future<ProcessResult> _runPowerShell(String script) {
+    return Process.run(
+      'powershell',
+      [
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        script,
+      ],
+    );
+  }
+
+  String _notifyWinInetScript() => r'''
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class SsrVpnWinInet {
+  [DllImport("wininet.dll", SetLastError=true)]
+  public static extern bool InternetSetOption(IntPtr hInternet, int option, IntPtr buffer, int length);
+}
+"@
+[SsrVpnWinInet]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
+[SsrVpnWinInet]::InternetSetOption([IntPtr]::Zero, 37, [IntPtr]::Zero, 0) | Out-Null
+''';
+}
+
+class _ProxySnapshot {
+  const _ProxySnapshot({
+    required this.proxyEnable,
+    required this.hasProxyServer,
+    required this.proxyServer,
+    required this.hasProxyOverride,
+    required this.proxyOverride,
+  });
+
+  final int proxyEnable;
+  final bool hasProxyServer;
+  final String proxyServer;
+  final bool hasProxyOverride;
+  final String proxyOverride;
+
+  factory _ProxySnapshot.fromJson(Map<String, dynamic> json) {
+    return _ProxySnapshot(
+      proxyEnable: (json['proxyEnable'] as num?)?.toInt() ?? 0,
+      hasProxyServer: json['hasProxyServer'] as bool? ?? false,
+      proxyServer: json['proxyServer'] as String? ?? '',
+      hasProxyOverride: json['hasProxyOverride'] as bool? ?? false,
+      proxyOverride: json['proxyOverride'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'proxyEnable': proxyEnable,
+        'hasProxyServer': hasProxyServer,
+        'proxyServer': proxyServer,
+        'hasProxyOverride': hasProxyOverride,
+        'proxyOverride': proxyOverride,
+      };
+}

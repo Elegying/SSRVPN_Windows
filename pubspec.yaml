@@ -1,0 +1,43 @@
+name: ssrvpn_windows
+description: SSRVPN - 安全稳定的VPN客户端 (Windows 绿色免安装版)
+publish_to: 'none'
+version: 1.0.1+2
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  provider: ^6.1.0
+
+  # YAML parsing for Clash config
+  yaml: ^3.1.0
+
+  # HTTP client for subscription fetch and Clash API
+  http: ^1.0.0
+
+  # UUID generation
+  uuid: ^3.0.7
+
+  # System tray for Windows
+  system_tray: ^2.0.3
+
+  # Window management
+  window_manager: ^0.4.3
+
+  # Path utilities
+  path: ^1.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/geoip.metadb.gz
+    - assets/icon.ico

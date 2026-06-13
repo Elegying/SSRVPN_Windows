@@ -1,0 +1,535 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
+import 'package:yaml/yaml.dart';
+import 'package:uuid/uuid.dart';
+import '../models/subscription.dart';
+import '../models/proxy_node.dart';
+import '../models/proxy_group.dart';
+
+/// 订阅管理服务
+class SubscriptionService extends ChangeNotifier {
+  static const int _maxSubscriptionBytes = 20 * 1024 * 1024;
+  static SubscriptionService? _instance;
+  final Uuid _uuid = const Uuid();
+
+  List<Subscription> _subscriptions = [];
+  String? _rawYaml;
+  String? _cacheDir;
+  int _revision = 0;
+
+  List<ProxyNode> _allNodes = [];
+  List<ProxyGroup> _allGroups = [];
+
+  SubscriptionService._();
+
+  static Future<SubscriptionService> getInstance(String cacheDir) async {
+    if (_instance == null) {
+      _instance = SubscriptionService._();
+      _instance!._cacheDir = cacheDir;
+      await _instance!._loadFromDisk();
+    }
+    return _instance!;
+  }
+
+  List<Subscription> get subscriptions => List.unmodifiable(_subscriptions);
+  String? get rawYaml => _rawYaml;
+  int get revision => _revision;
+  List<ProxyNode> get allNodes => List.unmodifiable(_allNodes);
+  List<ProxyGroup> get allGroups => List.unmodifiable(_allGroups);
+
+  /// 添加订阅
+  Future<Subscription> addSubscription(String name, String url) async {
+    final sub = Subscription(
+      id: _uuid.v4(),
+      name: name,
+      url: url,
+    );
+    _subscriptions.add(sub);
+    await _saveToDisk();
+    notifyListeners();
+    return sub;
+  }
+
+  /// 删除订阅
+  Future<void> removeSubscription(String id) async {
+    _subscriptions.removeWhere((s) => s.id == id);
+    await _saveToDisk();
+
+    if (_subscriptions.isEmpty) {
+      await _clearCachedNodes();
+      notifyListeners();
+      return;
+    }
+
+    try {
+      await refreshAllSubscriptions();
+    } catch (_) {
+      // Never keep nodes from a subscription that the user already deleted.
+      await _clearCachedNodes();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// 从URL拉取订阅配置
+  Future<String?> fetchSubscription(String url, {int maxRetries = 3}) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null ||
+        !uri.hasAuthority ||
+        (uri.scheme != 'http' && uri.scheme != 'https')) {
+      throw Exception('订阅地址必须是有效的 HTTP 或 HTTPS URL');
+    }
+
+    Exception? lastException;
+
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      final client = HttpClient();
+      try {
+        client.connectionTimeout = Duration(seconds: 15 * attempt);
+        final request = await client.getUrl(uri);
+        request.headers.set('User-Agent', 'clash-verge/v2.0.0');
+        request.headers.set('Accept', 'text/yaml, application/x-yaml, */*');
+
+        final response =
+            await request.close().timeout(Duration(seconds: 30 * attempt));
+
+        if (response.statusCode == 200) {
+          if (response.contentLength > _maxSubscriptionBytes) {
+            throw Exception('订阅内容超过 20 MB 限制');
+          }
+          final bodyBytes = await _readLimitedResponse(response);
+          String body = utf8.decode(bodyBytes, allowMalformed: true);
+
+          if (body.trim().isEmpty) {
+            throw Exception('服务器返回空内容');
+          }
+
+          // 尝试 Base64 解码
+          final compact = body.replaceAll(RegExp(r'\s'), '');
+          if (_isLikelyBase64(compact)) {
+            try {
+              final decoded = utf8.decode(base64Decode(compact));
+              if (decoded.trim().isNotEmpty) {
+                body = decoded;
+              }
+            } catch (_) {}
+          }
+
+          return body;
+        } else if (response.statusCode == 429) {
+          throw Exception('请求过于频繁 (HTTP 429)');
+        } else if (response.statusCode == 403) {
+          throw Exception('访问被拒绝 (HTTP 403)');
+        } else {
+          throw Exception('HTTP ${response.statusCode}');
+        }
+      } on SocketException catch (e) {
+        lastException = Exception('网络连接失败: ${e.message}');
+      } on TimeoutException catch (e) {
+        lastException = Exception('连接超时: ${e.duration}');
+      } on HttpException catch (e) {
+        lastException = Exception('HTTP错误: ${e.message}');
+      } catch (e) {
+        lastException = Exception('获取订阅失败: $e');
+      } finally {
+        client.close(force: true);
+      }
+
+      if (attempt < maxRetries) {
+        await Future.delayed(Duration(seconds: attempt * 2));
+      }
+    }
+
+    throw lastException ?? Exception('获取订阅失败: 未知错误');
+  }
+
+  /// 判断是否为Base64编码
+  bool _isLikelyBase64(String str) {
+    if (str.length < 20) return false;
+    final base64Pattern = RegExp(r'^[A-Za-z0-9+/\-_]+=*$');
+    if (!base64Pattern.hasMatch(str)) return false;
+    if (RegExp(r'^\d+$').hasMatch(str)) return false;
+    if (str.contains(':') && !str.contains('+') && !str.contains('/')) {
+      return false;
+    }
+    return true;
+  }
+
+  /// 刷新所有订阅
+  Future<String?> refreshAllSubscriptions() async {
+    if (_subscriptions.isEmpty) {
+      _rawYaml = null;
+      _allNodes = [];
+      _allGroups = [];
+      return null;
+    }
+
+    final allYamlBuffers = <String>[];
+    final succeededSubs = <Subscription>[];
+    final errors = <String>[];
+
+    for (final sub in _subscriptions.where((s) => s.enabled)) {
+      try {
+        String? yaml;
+        if (isSsrLink(sub.url)) {
+          yaml = importSsrLink(sub.url);
+        } else {
+          yaml = await fetchSubscription(sub.url);
+        }
+        if (yaml != null && yaml.isNotEmpty) {
+          allYamlBuffers.add(yaml);
+          succeededSubs.add(sub);
+        } else {
+          errors.add('${sub.name}: 返回内容为空');
+        }
+      } catch (e) {
+        errors.add('${sub.name}: $e');
+        continue;
+      }
+    }
+
+    if (succeededSubs.isEmpty) {
+      final errorDetail = errors.isNotEmpty ? errors.join('\n') : '无可用订阅';
+      throw Exception('所有订阅刷新失败:\n$errorDetail');
+    }
+
+    final oldYaml = _rawYaml;
+    final mergedYaml = _mergeYamlConfigs(allYamlBuffers);
+    if (mergedYaml.trim().isEmpty) {
+      throw Exception('订阅中没有可用的代理节点');
+    }
+    _rawYaml = mergedYaml;
+    if (_rawYaml != oldYaml) _revision++;
+
+    if (_rawYaml != null) {
+      await _cacheYaml(_rawYaml!);
+    }
+
+    _parseYaml();
+
+    final now = DateTime.now();
+    for (final sub in succeededSubs) {
+      sub.lastUpdate = now;
+    }
+    await _saveToDisk();
+    notifyListeners();
+
+    return _rawYaml;
+  }
+
+  String _extractSection(String yaml, String sectionName) {
+    final lines = yaml.split('\n');
+    final sectionLines = <String>[];
+    bool inSection = false;
+
+    for (final line in lines) {
+      if (!line.startsWith(' ') && !line.startsWith('\t')) {
+        if (line.trim().startsWith('$sectionName:')) {
+          inSection = true;
+          continue;
+        } else if (inSection &&
+            line.trim().contains(':') &&
+            !line.trim().startsWith('#') &&
+            !line.trim().startsWith('-')) {
+          break;
+        }
+      }
+      if (inSection) {
+        sectionLines.add(line);
+      }
+    }
+
+    int minIndent = 999;
+    for (final line in sectionLines) {
+      final t = line.trimLeft();
+      if (t.isEmpty) continue;
+      final indent = line.length - t.length;
+      if (indent < minIndent) minIndent = indent;
+    }
+    if (minIndent == 999) minIndent = 0;
+
+    final buffer = StringBuffer();
+    for (final line in sectionLines) {
+      final trimmed = line.trimLeft();
+      if (trimmed.isEmpty) continue;
+      final delta = line.length - trimmed.length - minIndent;
+      buffer.writeln('${' ' * (delta + 2)}$trimmed');
+    }
+    return buffer.toString().trimRight();
+  }
+
+  String _mergeYamlConfigs(List<String> yamls) {
+    if (yamls.isEmpty) return '';
+
+    final seenNames = <String>{};
+    final buffer = StringBuffer();
+    buffer.writeln('proxies:');
+    var hasAny = false;
+
+    for (final yaml in yamls) {
+      final proxiesText = _extractSection(yaml, 'proxies');
+      if (proxiesText.isEmpty) continue;
+      for (final item in _splitProxyItems(proxiesText)) {
+        final name = _proxyItemName(item);
+        if (name == null || !seenNames.add(name)) continue;
+        buffer.writeln(item);
+        hasAny = true;
+      }
+    }
+
+    return hasAny ? buffer.toString() : '';
+  }
+
+  List<String> _splitProxyItems(String proxiesText) {
+    final items = <String>[];
+    StringBuffer? current;
+    for (final line in proxiesText.split('\n')) {
+      if (line.startsWith('  - ')) {
+        if (current != null) items.add(current.toString().trimRight());
+        current = StringBuffer()..writeln(line);
+      } else if (current != null) {
+        current.writeln(line);
+      }
+    }
+    if (current != null) items.add(current.toString().trimRight());
+    return items;
+  }
+
+  String? _proxyItemName(String item) {
+    try {
+      final parsed = loadYaml('proxies:\n$item');
+      final list = (parsed as Map)['proxies'];
+      if (list is List && list.isNotEmpty && list.first is Map) {
+        return (list.first as Map)['name']?.toString();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  void _parseYaml() {
+    _allNodes = [];
+    _allGroups = [];
+    if (_rawYaml == null || _rawYaml!.trim().isEmpty) return;
+
+    try {
+      final doc = loadYaml(_rawYaml!);
+      if (doc is! Map) return;
+
+      final proxies = doc['proxies'];
+      if (proxies is List) {
+        for (final proxy in proxies) {
+          if (proxy is Map) {
+            final name = proxy['name']?.toString() ?? 'Unknown';
+            final port = int.tryParse(proxy['port']?.toString() ?? '') ?? 0;
+            if (name.isEmpty || port < 1 || port > 65535) continue;
+            _allNodes.add(ProxyNode(
+              name: name,
+              type: proxy['type']?.toString() ?? 'ss',
+              server: proxy['server']?.toString() ?? '',
+              port: port,
+              group: '全部节点',
+              extra: Map<String, dynamic>.from(proxy),
+            ));
+          }
+        }
+      }
+
+      final proxyGroups = doc['proxy-groups'];
+      if (proxyGroups is List) {
+        for (final group in proxyGroups) {
+          if (group is Map) {
+            final groupName = group['name'] as String? ?? 'Unknown';
+            final groupType = group['type'] as String? ?? 'select';
+            final groupProxies = (group['proxies'] as List?)
+                    ?.map((e) => e.toString())
+                    .toList() ??
+                [];
+
+            final groupNodes = <ProxyNode>[];
+            for (final proxyName in groupProxies) {
+              final node = _allNodes.firstWhere(
+                (n) => n.name == proxyName,
+                orElse: () => ProxyNode(
+                  name: proxyName,
+                  type: 'unknown',
+                  server: '',
+                  port: 0,
+                  group: groupName,
+                ),
+              );
+              if (node.name != 'unknown' ||
+                  proxyName == 'DIRECT' ||
+                  proxyName == 'REJECT') {
+                groupNodes.add(node);
+              }
+            }
+
+            _allGroups.add(ProxyGroup(
+              name: groupName,
+              type: groupType,
+              nodes: groupNodes,
+            ));
+          }
+        }
+      }
+    } catch (e) {
+      // YAML解析失败
+    }
+  }
+
+  bool isSsrLink(String input) {
+    return input.trim().toLowerCase().startsWith('ssr://');
+  }
+
+  String? importSsrLink(String ssrLink) {
+    try {
+      final link = ssrLink.trim();
+      if (!link.toLowerCase().startsWith('ssr://')) return null;
+
+      final encoded = link.substring(6);
+      final decoded = utf8.decode(base64Decode(_fixBase64(encoded)));
+
+      final mainPart = decoded.split('/?').first;
+      final params = decoded.contains('/?') ? decoded.split('/?').last : '';
+
+      final parts = mainPart.split(':');
+      if (parts.length < 6) return null;
+
+      final server = parts[0];
+      final port = int.tryParse(parts[1]) ?? 0;
+      if (server.isEmpty || port < 1 || port > 65535) return null;
+      final protocol = parts[2];
+      final method = parts[3];
+      final obfs = parts[4];
+      final passwordB64 = parts.sublist(5).join(':');
+      final password = utf8.decode(base64Decode(_fixBase64(passwordB64)));
+
+      final paramMap = <String, String>{};
+      if (params.isNotEmpty) {
+        for (final param in params.split('&')) {
+          final separator = param.indexOf('=');
+          if (separator <= 0) continue;
+          paramMap[param.substring(0, separator)] =
+              param.substring(separator + 1);
+        }
+      }
+
+      final remarks = paramMap['remarks'] != null
+          ? utf8.decode(base64Decode(_fixBase64(paramMap['remarks']!)))
+          : '$server:$port';
+
+      final obfsparam = paramMap['obfsparam'] != null
+          ? utf8.decode(base64Decode(_fixBase64(paramMap['obfsparam']!)))
+          : '';
+      final protoparam = paramMap['protoparam'] != null
+          ? utf8.decode(base64Decode(_fixBase64(paramMap['protoparam']!)))
+          : '';
+
+      final buffer = StringBuffer();
+      buffer.writeln('proxies:');
+      buffer.writeln('  - name: ${jsonEncode(remarks)}');
+      buffer.writeln('    type: ssr');
+      buffer.writeln('    server: ${jsonEncode(server)}');
+      buffer.writeln('    port: $port');
+      buffer.writeln('    cipher: ${jsonEncode(method)}');
+      buffer.writeln('    password: ${jsonEncode(password)}');
+      buffer.writeln('    protocol: ${jsonEncode(protocol)}');
+      if (protoparam.isNotEmpty) {
+        buffer.writeln('    protocol-param: ${jsonEncode(protoparam)}');
+      }
+      buffer.writeln('    obfs: ${jsonEncode(obfs)}');
+      if (obfsparam.isNotEmpty) {
+        buffer.writeln('    obfs-param: ${jsonEncode(obfsparam)}');
+      }
+      buffer.writeln('    udp: true');
+
+      return buffer.toString();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  String _fixBase64(String str) {
+    var s = str.replaceAll('-', '+').replaceAll('_', '/');
+    final mod = s.length % 4;
+    if (mod == 2) s += '==';
+    if (mod == 3) s += '=';
+    return s;
+  }
+
+  Future<Uint8List> _readLimitedResponse(HttpClientResponse response) async {
+    final builder = BytesBuilder(copy: false);
+    var total = 0;
+    await for (final chunk in response) {
+      total += chunk.length;
+      if (total > _maxSubscriptionBytes) {
+        throw Exception('订阅内容超过 20 MB 限制');
+      }
+      builder.add(chunk);
+    }
+    return builder.takeBytes();
+  }
+
+  Future<void> _cacheYaml(String yaml) async {
+    if (_cacheDir == null) return;
+    final file = File('$_cacheDir/subscription_cache.yaml');
+    final temp = File('${file.path}.tmp');
+    await temp.writeAsString(yaml, flush: true);
+    await temp.rename(file.path);
+  }
+
+  void setRawYaml(String yaml) {
+    if (yaml != _rawYaml) _revision++;
+    _rawYaml = yaml;
+    _parseYaml();
+    _cacheYaml(yaml);
+    notifyListeners();
+  }
+
+  Future<void> _loadFromDisk() async {
+    if (_cacheDir == null) return;
+
+    final subsFile = File('$_cacheDir/subscriptions.json');
+    if (await subsFile.exists()) {
+      try {
+        final content = await subsFile.readAsString();
+        final list = jsonDecode(content) as List;
+        _subscriptions = list
+            .map((e) => Subscription.fromJson(e as Map<String, dynamic>))
+            .toList();
+      } catch (e) {
+        _subscriptions = [];
+      }
+    }
+
+    final cacheFile = File('$_cacheDir/subscription_cache.yaml');
+    if (await cacheFile.exists()) {
+      _rawYaml = await cacheFile.readAsString();
+      _parseYaml();
+    }
+  }
+
+  Future<void> _saveToDisk() async {
+    if (_cacheDir == null) return;
+    final file = File('$_cacheDir/subscriptions.json');
+    final jsonStr = jsonEncode(_subscriptions.map((s) => s.toJson()).toList());
+    final temp = File('${file.path}.tmp');
+    await temp.writeAsString(jsonStr, flush: true);
+    await temp.rename(file.path);
+  }
+
+  Future<void> _clearCachedNodes() async {
+    _rawYaml = null;
+    _allNodes = [];
+    _allGroups = [];
+    _revision++;
+    if (_cacheDir == null) return;
+    try {
+      final cacheFile = File('$_cacheDir/subscription_cache.yaml');
+      if (await cacheFile.exists()) await cacheFile.delete();
+    } catch (_) {}
+  }
+}
