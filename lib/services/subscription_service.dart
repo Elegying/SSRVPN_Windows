@@ -264,7 +264,8 @@ class SubscriptionService extends ChangeNotifier {
   String _mergeYamlConfigs(List<String> yamls) {
     if (yamls.isEmpty) return '';
 
-    final seenNames = <String>{};
+    final usedNames = <String>{};
+    final fingerprintsByName = <String, Set<String>>{};
     final buffer = StringBuffer();
     buffer.writeln('proxies:');
     var hasAny = false;
@@ -273,9 +274,19 @@ class SubscriptionService extends ChangeNotifier {
       final proxiesText = _extractSection(yaml, 'proxies');
       if (proxiesText.isEmpty) continue;
       for (final item in _splitProxyItems(proxiesText)) {
-        final name = _proxyItemName(item);
-        if (name == null || !seenNames.add(name)) continue;
-        buffer.writeln(item);
+        final proxy = _parseProxyItem(item);
+        final originalName = proxy?['name']?.toString().trim();
+        if (proxy == null || originalName == null || originalName.isEmpty) {
+          continue;
+        }
+
+        final fingerprint = jsonEncode(_canonicalJsonValue(proxy));
+        final fingerprints =
+            fingerprintsByName.putIfAbsent(originalName, () => <String>{});
+        if (!fingerprints.add(fingerprint)) continue;
+
+        proxy['name'] = _uniqueProxyName(originalName, usedNames);
+        buffer.writeln('  - ${jsonEncode(proxy)}');
         hasAny = true;
       }
     }
@@ -298,15 +309,52 @@ class SubscriptionService extends ChangeNotifier {
     return items;
   }
 
-  String? _proxyItemName(String item) {
+  Map<String, dynamic>? _parseProxyItem(String item) {
     try {
       final parsed = loadYaml('proxies:\n$item');
       final list = (parsed as Map)['proxies'];
       if (list is List && list.isNotEmpty && list.first is Map) {
-        return (list.first as Map)['name']?.toString();
+        final value = _jsonValue(list.first);
+        if (value is Map<String, dynamic>) return value;
       }
     } catch (_) {}
     return null;
+  }
+
+  String _uniqueProxyName(String baseName, Set<String> usedNames) {
+    if (usedNames.add(baseName)) return baseName;
+    var suffix = 2;
+    while (!usedNames.add('$baseName ($suffix)')) {
+      suffix++;
+    }
+    return '$baseName ($suffix)';
+  }
+
+  dynamic _jsonValue(dynamic value) {
+    if (value is Map) {
+      final result = <String, dynamic>{};
+      for (final entry in value.entries) {
+        result[entry.key.toString()] = _jsonValue(entry.value);
+      }
+      return result;
+    }
+    if (value is List) {
+      return value.map(_jsonValue).toList();
+    }
+    return value;
+  }
+
+  dynamic _canonicalJsonValue(dynamic value) {
+    if (value is Map) {
+      final keys = value.keys.map((key) => key.toString()).toList()..sort();
+      return <String, dynamic>{
+        for (final key in keys) key: _canonicalJsonValue(value[key]),
+      };
+    }
+    if (value is List) {
+      return value.map(_canonicalJsonValue).toList();
+    }
+    return value;
   }
 
   void _parseYaml() {
