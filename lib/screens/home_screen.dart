@@ -337,7 +337,6 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }, timeoutMs: timeout);
     if (mounted && !_disposed) {
-      _sortNodesByLatency();
       setState(() => _isBatchTesting = false);
     }
   }
@@ -361,25 +360,8 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }, timeoutMs: timeout);
     if (mounted && !_disposed) {
-      _sortNodesByLatency();
       setState(() => _isBatchTesting = false);
     }
-  }
-
-  void _sortNodesByLatency() {
-    final originalOrder = List<ProxyNode>.from(_nodes);
-    setState(() {
-      _nodes.sort((a, b) {
-        final la = _latencies[a.name] ?? a.latency ?? 0;
-        final lb = _latencies[b.name] ?? b.latency ?? 0;
-        final aTimeout = la <= 0 || la >= 65535;
-        final bTimeout = lb <= 0 || lb >= 65535;
-        if (aTimeout && !bTimeout) return 1;
-        if (!aTimeout && bTimeout) return -1;
-        if (!aTimeout && !bTimeout && la != lb) return la.compareTo(lb);
-        return originalOrder.indexOf(a).compareTo(originalOrder.indexOf(b));
-      });
-    });
   }
 
   void _showTutorial(BuildContext context) {
