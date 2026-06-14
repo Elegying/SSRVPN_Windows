@@ -131,4 +131,13 @@ class SettingsService extends ChangeNotifier {
     _settings.lastSelectedNodeName = nodeName;
     await save();
   }
+
+  Future<void> renameLastSelectedNode(
+    String originalName,
+    String updatedName,
+  ) async {
+    if (_settings.lastSelectedNodeName != originalName) return;
+    _settings.lastSelectedNodeName = updatedName;
+    await save();
+  }
 }

@@ -40,6 +40,89 @@ class SubscriptionService extends ChangeNotifier {
   List<ProxyNode> get allNodes => List.unmodifiable(_allNodes);
   List<ProxyGroup> get allGroups => List.unmodifiable(_allGroups);
 
+  /// Updates one node in the local YAML cache only.
+  ///
+  /// A later subscription refresh replaces this cache with remote content.
+  Future<void> updateNode(
+    String originalName,
+    Map<String, dynamic> updatedConfig,
+  ) async {
+    final rawYaml = _rawYaml;
+    if (rawYaml == null || rawYaml.trim().isEmpty) {
+      throw Exception('本地订阅缓存为空，无法保存节点');
+    }
+
+    final name = updatedConfig['name']?.toString().trim() ?? '';
+    final server = updatedConfig['server']?.toString().trim() ?? '';
+    final port = int.tryParse(updatedConfig['port']?.toString() ?? '');
+    if (name.isEmpty) throw Exception('节点备注名不能为空');
+    if (server.isEmpty) throw Exception('服务器地址不能为空');
+    if (port == null || port < 1 || port > 65535) {
+      throw Exception('端口必须是 1-65535 之间的整数');
+    }
+
+    try {
+      final parsed = _jsonValue(loadYaml(rawYaml));
+      if (parsed is! Map<String, dynamic>) {
+        throw Exception('订阅缓存格式无效');
+      }
+      final proxies = parsed['proxies'];
+      if (proxies is! List) {
+        throw Exception('订阅缓存中没有节点列表');
+      }
+
+      final originalIndex = proxies.indexWhere(
+        (proxy) => proxy is Map && proxy['name']?.toString() == originalName,
+      );
+      if (originalIndex < 0) {
+        throw Exception('找不到要编辑的节点，节点可能已被刷新');
+      }
+      final duplicate = proxies.any(
+        (proxy) =>
+            proxy is Map &&
+            proxy['name']?.toString() == name &&
+            proxy['name']?.toString() != originalName,
+      );
+      if (duplicate) throw Exception('节点名称“$name”已存在，请使用其他名称');
+
+      final replacement = Map<String, dynamic>.from(
+        _jsonValue(updatedConfig) as Map<String, dynamic>,
+      );
+      replacement['name'] = name;
+      replacement['server'] = server;
+      replacement['port'] = port;
+      proxies[originalIndex] = replacement;
+
+      if (name != originalName) {
+        final groups = parsed['proxy-groups'];
+        if (groups is List) {
+          for (final group in groups) {
+            if (group is! Map) continue;
+            final references = group['proxies'];
+            if (references is! List) continue;
+            for (var i = 0; i < references.length; i++) {
+              if (references[i]?.toString() == originalName) {
+                references[i] = name;
+              }
+            }
+          }
+        }
+      }
+
+      final serialized = _serializeYamlDocument(parsed);
+      await _cacheYaml(serialized);
+      _rawYaml = serialized;
+      _revision++;
+      _parseYaml();
+      notifyListeners();
+    } on YamlException catch (e) {
+      throw Exception('本地订阅 YAML 解析失败：${e.message}');
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('保存节点失败：$e');
+    }
+  }
+
   /// 添加订阅
   Future<Subscription> addSubscription(String name, String url) async {
     final sub = Subscription(
@@ -357,6 +440,22 @@ class SubscriptionService extends ChangeNotifier {
     return value;
   }
 
+  String _serializeYamlDocument(Map<String, dynamic> document) {
+    final buffer = StringBuffer();
+    for (final entry in document.entries) {
+      final value = entry.value;
+      if (value is List) {
+        buffer.writeln('${entry.key}:');
+        for (final item in value) {
+          buffer.writeln('  - ${jsonEncode(item)}');
+        }
+      } else {
+        buffer.writeln('${entry.key}: ${jsonEncode(value)}');
+      }
+    }
+    return buffer.toString();
+  }
+
   void _parseYaml() {
     _allNodes = [];
     _allGroups = [];
@@ -529,12 +628,17 @@ class SubscriptionService extends ChangeNotifier {
     await temp.rename(file.path);
   }
 
-  void setRawYaml(String yaml) {
+  Future<void> setRawYaml(String yaml) async {
     if (yaml != _rawYaml) _revision++;
     _rawYaml = yaml;
     _parseYaml();
-    _cacheYaml(yaml);
+    await _cacheYaml(yaml);
     notifyListeners();
+  }
+
+  @visibleForTesting
+  static void resetInstanceForTesting() {
+    _instance = null;
   }
 
   Future<void> _loadFromDisk() async {

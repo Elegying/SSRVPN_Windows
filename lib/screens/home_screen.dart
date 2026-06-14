@@ -11,6 +11,7 @@ import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/connection_button.dart';
 import '../widgets/glass_container.dart';
+import 'node_edit_screen.dart';
 
 /// 主屏幕 — Windows 桌面优化
 class HomeScreen extends StatefulWidget {
@@ -287,6 +288,38 @@ class _HomeScreenState extends State<HomeScreen> {
             duration: const Duration(seconds: 1)),
       );
     }
+  }
+
+  Future<void> _showNodeContextMenu(
+    ProxyNode node,
+    TapDownDetails details,
+  ) async {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        details.globalPosition & const Size(1, 1),
+        Offset.zero & overlay.size,
+      ),
+      items: const [
+        PopupMenuItem<String>(
+          value: 'edit',
+          child: Row(
+            children: [
+              Icon(Icons.edit_outlined, size: 18),
+              SizedBox(width: 10),
+              Text('编辑'),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (selected != 'edit' || !mounted) return;
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => NodeEditScreen(node: node),
+      ),
+    );
   }
 
   ProxyNode? _resolveDefaultNode(
@@ -920,6 +953,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onTestLatency: () =>
               _handleTestLatency(node.name, node.server, node.port),
           onTap: () => _handleSelectNode(node),
+          onSecondaryTapDown: (details) => _showNodeContextMenu(node, details),
           textColor: textColor,
           subColor: subColor,
           isDark: isDark,
@@ -975,6 +1009,7 @@ class _NodeCard extends StatelessWidget {
   final bool isConnected;
   final VoidCallback onTestLatency;
   final VoidCallback onTap;
+  final GestureTapDownCallback onSecondaryTapDown;
   final Color textColor;
   final Color subColor;
   final bool isDark;
@@ -988,6 +1023,7 @@ class _NodeCard extends StatelessWidget {
     required this.isConnected,
     required this.onTestLatency,
     required this.onTap,
+    required this.onSecondaryTapDown,
     required this.textColor,
     required this.subColor,
     required this.isDark,
@@ -1002,6 +1038,7 @@ class _NodeCard extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 6),
       child: GestureDetector(
         onTap: isTimeout ? null : onTap,
+        onSecondaryTapDown: onSecondaryTapDown,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           decoration: BoxDecoration(
