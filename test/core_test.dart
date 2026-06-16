@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yaml/yaml.dart';
 
@@ -75,6 +77,29 @@ proxies:
       final parsed = loadYaml(config) as YamlMap;
       expect(parsed['proxy-groups'][0]['proxies'], ['Second', 'First']);
       expect(parsed['proxy-groups'][1]['proxies'], ['First', 'Second']);
+    });
+
+    test('selects temporary ports when preferred ports are occupied', () async {
+      final occupied = await ServerSocket.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+        shared: false,
+      );
+      addTearDown(occupied.close);
+
+      final runtime = await ClashService().prepareForStart(
+        AppSettings(
+          proxyPort: occupied.port,
+          socksPort: occupied.port,
+          apiPort: occupied.port,
+        ),
+      );
+
+      expect(runtime.proxyPort, isNot(occupied.port));
+      expect(
+        {runtime.proxyPort, runtime.socksPort, runtime.apiPort},
+        hasLength(3),
+      );
     });
   });
 

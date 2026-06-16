@@ -12,13 +12,24 @@ class SystemProxyService {
   bool _recoveryPending = false;
   String? _statePath;
   _ProxySnapshot? _previousProxy;
+  String? _lastError;
 
   bool get isProxyEnabled => _proxyEnabled;
+  String? get lastError => _lastError;
 
   /// Restores proxy settings left behind by an abnormal previous shutdown.
   Future<void> initialize(String dataDir) async {
     if (!Platform.isWindows) return;
-    _statePath = '$dataDir${Platform.pathSeparator}system_proxy_backup.json';
+    _lastError = null;
+    // This snapshot is machine-specific state. Keeping it outside the portable
+    // directory prevents a copied folder from restoring another PC's proxy.
+    final localAppData = Platform.environment['LOCALAPPDATA'];
+    final runtimeDir = localAppData == null || localAppData.trim().isEmpty
+        ? dataDir
+        : '$localAppData${Platform.pathSeparator}SSRVPN'
+            '${Platform.pathSeparator}runtime';
+    await Directory(runtimeDir).create(recursive: true);
+    _statePath = '$runtimeDir${Platform.pathSeparator}system_proxy_backup.json';
     final backupFile = File(_statePath!);
     if (!await backupFile.exists()) return;
 
@@ -31,22 +42,34 @@ class SystemProxyService {
         _recoveryPending = false;
       } else {
         _recoveryPending = true;
+        _lastError = '上次异常退出后的系统代理设置未能恢复';
       }
-    } catch (_) {
+    } catch (e) {
       // Keep the backup for a future retry instead of deleting recovery data.
       _recoveryPending = true;
+      _lastError = '读取系统代理恢复文件失败: $e';
     }
   }
 
   Future<bool> setSystemProxy(String host, int port) async {
     if (!Platform.isWindows) return false;
-    if (_recoveryPending) return false;
-    if (!_isValidHost(host) || port < 1 || port > 65535) return false;
+    _lastError = null;
+    if (_recoveryPending) {
+      _lastError = '系统代理仍有未恢复的旧状态，请查看运行日志';
+      return false;
+    }
+    if (!_isValidHost(host) || port < 1 || port > 65535) {
+      _lastError = '代理地址或端口无效: $host:$port';
+      return false;
+    }
 
     try {
       if (!_ownsProxy) {
         final snapshot = await _readCurrentProxy();
-        if (snapshot == null) return false;
+        if (snapshot == null) {
+          _lastError ??= '无法读取当前 Windows 系统代理设置';
+          return false;
+        }
         await _writeBackup(snapshot);
         _previousProxy = snapshot;
       }
@@ -62,6 +85,7 @@ ${_notifyWinInetScript()}
 
       final result = await _runPowerShell(script);
       if (result.exitCode != 0) {
+        _lastError = _formatPowerShellError('写入 Windows 系统代理失败', result);
         await _restoreSnapshot(_previousProxy!);
         await _deleteBackup();
         _previousProxy = null;
@@ -71,7 +95,8 @@ ${_notifyWinInetScript()}
       _ownsProxy = true;
       _proxyEnabled = true;
       return true;
-    } catch (_) {
+    } catch (e) {
+      _lastError = '设置 Windows 系统代理异常: $e';
       return false;
     }
   }
@@ -88,7 +113,10 @@ ${_notifyWinInetScript()}
     if (snapshot == null) return false;
 
     try {
-      if (!await _restoreSnapshot(snapshot)) return false;
+      if (!await _restoreSnapshot(snapshot)) {
+        _lastError ??= '恢复原 Windows 系统代理设置失败';
+        return false;
+      }
       _ownsProxy = false;
       _proxyEnabled = false;
       _recoveryPending = false;
@@ -96,7 +124,8 @@ ${_notifyWinInetScript()}
 
       await _deleteBackup();
       return true;
-    } catch (_) {
+    } catch (e) {
+      _lastError = '恢复 Windows 系统代理异常: $e';
       return false;
     }
   }
@@ -116,7 +145,10 @@ $item = Get-ItemProperty -Path $regPath
 } | ConvertTo-Json -Compress
 ''';
     final result = await _runPowerShell(script);
-    if (result.exitCode != 0) return null;
+    if (result.exitCode != 0) {
+      _lastError = _formatPowerShellError('读取 Windows 系统代理失败', result);
+      return null;
+    }
 
     final output = result.stdout.toString().trim();
     if (output.isEmpty) return null;
@@ -146,6 +178,9 @@ if (${snapshot.hasProxyOverride ? r'$true' : r'$false'}) {
 ${_notifyWinInetScript()}
 ''';
     final result = await _runPowerShell(script);
+    if (result.exitCode != 0) {
+      _lastError = _formatPowerShellError('恢复 Windows 系统代理失败', result);
+    }
     return result.exitCode == 0;
   }
 
@@ -181,6 +216,15 @@ ${_notifyWinInetScript()}
         script,
       ],
     );
+  }
+
+  String _formatPowerShellError(String prefix, ProcessResult result) {
+    final stderr = result.stderr.toString().trim();
+    final stdout = result.stdout.toString().trim();
+    final detail = stderr.isNotEmpty ? stderr : stdout;
+    return detail.isEmpty
+        ? '$prefix（退出码 ${result.exitCode}）'
+        : '$prefix（退出码 ${result.exitCode}）: $detail';
   }
 
   String _notifyWinInetScript() => r'''

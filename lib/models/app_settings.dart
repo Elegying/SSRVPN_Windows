@@ -41,6 +41,38 @@ class AppSettings {
     this.latencyTestTimeout = 5000,
   });
 
+  AppSettings copyWith({
+    int? proxyPort,
+    int? socksPort,
+    int? apiPort,
+    String? apiSecret,
+    ProxyMode? proxyMode,
+    bool? enableTun,
+    String? tunStack,
+    bool? minimizeToTray,
+    bool? startWithWindows,
+    bool? darkMode,
+    String? latencyTestUrl,
+    String? lastSelectedNodeName,
+    int? latencyTestTimeout,
+  }) {
+    return AppSettings(
+      proxyPort: proxyPort ?? this.proxyPort,
+      socksPort: socksPort ?? this.socksPort,
+      apiPort: apiPort ?? this.apiPort,
+      apiSecret: apiSecret ?? this.apiSecret,
+      proxyMode: proxyMode ?? this.proxyMode,
+      enableTun: enableTun ?? this.enableTun,
+      tunStack: tunStack ?? this.tunStack,
+      minimizeToTray: minimizeToTray ?? this.minimizeToTray,
+      startWithWindows: startWithWindows ?? this.startWithWindows,
+      darkMode: darkMode ?? this.darkMode,
+      latencyTestUrl: latencyTestUrl ?? this.latencyTestUrl,
+      lastSelectedNodeName: lastSelectedNodeName ?? this.lastSelectedNodeName,
+      latencyTestTimeout: latencyTestTimeout ?? this.latencyTestTimeout,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
         'proxyPort': proxyPort,
         'socksPort': socksPort,
@@ -90,8 +122,6 @@ class AppSettings {
     switch (mode) {
       case 'global':
         return ProxyMode.global;
-      case 'direct':
-        return ProxyMode.direct;
       default:
         return ProxyMode.rule;
     }
@@ -101,8 +131,7 @@ class AppSettings {
 /// 代理模式枚举
 enum ProxyMode {
   global('全局模式', 'Global'),
-  rule('规则模式', 'Rule'),
-  direct('直连模式', 'Direct');
+  rule('规则模式', 'Rule');
 
   final String chineseName;
   final String englishName;

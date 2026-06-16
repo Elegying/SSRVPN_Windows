@@ -11,6 +11,8 @@ class SettingsService extends ChangeNotifier {
   static SettingsService? _instance;
   late AppSettings _settings;
   late String _settingsPath;
+  late String _dataDir;
+  String? _storageNotice;
 
   SettingsService._();
 
@@ -23,18 +25,76 @@ class SettingsService extends ChangeNotifier {
   }
 
   Future<void> _init() async {
-    // 设置文件放在 exe 同级目录（便携模式）
-    final exeDir = File(Platform.resolvedExecutable).parent.path;
-    _settingsPath =
-        '$exeDir${Platform.pathSeparator}ssrvpn${Platform.pathSeparator}settings.json';
-
-    // 确保目录存在
-    await Directory(File(_settingsPath).parent.path).create(recursive: true);
+    _dataDir = await _resolveDataDirectory();
+    _settingsPath = '$_dataDir${Platform.pathSeparator}settings.json';
 
     await _load();
   }
 
   AppSettings get settings => _settings;
+  String get dataDir => _dataDir;
+  String? get storageNotice => _storageNotice;
+
+  Future<String> _resolveDataDirectory() async {
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+    final portableDir = '$exeDir${Platform.pathSeparator}ssrvpn';
+    try {
+      await _verifyWritableDirectory(portableDir);
+      return portableDir;
+    } catch (e) {
+      final localAppData = Platform.environment['LOCALAPPDATA'];
+      if (localAppData == null || localAppData.trim().isEmpty) {
+        rethrow;
+      }
+
+      final fallbackDir =
+          '$localAppData${Platform.pathSeparator}SSRVPN${Platform.pathSeparator}ssrvpn';
+      await _verifyWritableDirectory(fallbackDir);
+      await _migratePortableData(portableDir, fallbackDir);
+      _storageNotice = '程序目录不可写，数据已改存到 $fallbackDir（原因: $e）';
+      return fallbackDir;
+    }
+  }
+
+  Future<void> _verifyWritableDirectory(String path) async {
+    final directory = Directory(path);
+    await directory.create(recursive: true);
+    final probe = File(
+      '$path${Platform.pathSeparator}.write_test_${pid}_${DateTime.now().microsecondsSinceEpoch}',
+    );
+    try {
+      await probe.writeAsString('ok', flush: true);
+    } finally {
+      if (await probe.exists()) await probe.delete();
+    }
+  }
+
+  Future<void> _migratePortableData(
+    String portableDir,
+    String fallbackDir,
+  ) async {
+    final source = Directory(portableDir);
+    if (!await source.exists()) return;
+
+    const fileNames = [
+      'settings.json',
+      'subscriptions.json',
+      'subscription_cache.yaml',
+      'config.yaml',
+      'country.mmdb',
+      'geoip.metadb',
+    ];
+    for (final name in fileNames) {
+      final sourceFile = File('$portableDir${Platform.pathSeparator}$name');
+      final targetFile = File('$fallbackDir${Platform.pathSeparator}$name');
+      if (!await sourceFile.exists() || await targetFile.exists()) continue;
+      try {
+        await sourceFile.copy(targetFile.path);
+      } catch (_) {
+        // A single locked cache file should not block application startup.
+      }
+    }
+  }
 
   Future<void> _load() async {
     final file = File(_settingsPath);
@@ -129,6 +189,15 @@ class SettingsService extends ChangeNotifier {
 
   Future<void> updateLastSelectedNodeName(String nodeName) async {
     _settings.lastSelectedNodeName = nodeName;
+    await save();
+  }
+
+  Future<void> renameLastSelectedNode(
+    String originalName,
+    String updatedName,
+  ) async {
+    if (_settings.lastSelectedNodeName != originalName) return;
+    _settings.lastSelectedNodeName = updatedName;
     await save();
   }
 }
