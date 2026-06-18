@@ -312,8 +312,7 @@ class LiquidGlassDemo extends StatelessWidget {
                             Text('SSRVPN',
                                 style: TextStyle(
                                     fontSize: 18, fontWeight: FontWeight.w700)),
-                            Text('已连接 · TUN 模式',
-                                style: TextStyle(fontSize: 13)),
+                            Text('已连接', style: TextStyle(fontSize: 13)),
                           ],
                         ),
                       ],

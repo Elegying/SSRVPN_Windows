@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:yaml/yaml.dart';
 import '../models/proxy_node.dart';
 import '../models/app_settings.dart';
@@ -18,12 +19,19 @@ class ClashService {
   Future<bool>? _startOperation;
   Future<void>? _stopOperation;
   bool _isRunning = false;
+  bool _stoppingCore = false;
+  String? _lastHealthCheckError;
+  String? _lastStartError;
 
   AppSettings _settings = AppSettings();
   String _corePath = '';
   String _configDir = '';
   String _configPath = '';
   String _logBuffer = '';
+  File? _logFile;
+  Future<void> _pendingLogWrite = Future<void>.value();
+  final HttpClient _directHttpClient = _createDirectHttpClient();
+  late final http.Client _apiClient = IOClient(_directHttpClient);
 
   final SystemProxyService _proxyService = SystemProxyService();
 
@@ -33,32 +41,59 @@ class ClashService {
   bool get isRunning => _isRunning;
   String get recentLogs => _logBuffer;
   String get configDir => _configDir;
+  String get logPath => _logFile?.path ?? '';
+  String? get lastStartError => _lastStartError;
+  int get runtimeProxyPort => _settings.proxyPort;
+  int get runtimeSocksPort => _settings.socksPort;
+  int get runtimeApiPort => _settings.apiPort;
+
+  static HttpClient _createDirectHttpClient() {
+    final client = HttpClient();
+    client.findProxy = (_) => 'DIRECT';
+    client.connectionTimeout = const Duration(seconds: 3);
+    return client;
+  }
 
   void updateSettings(AppSettings settings) {
     _settings = settings;
   }
 
   /// 初始化服务
-  Future<void> init(AppSettings settings) async {
+  Future<void> init(
+    AppSettings settings, {
+    String? dataDir,
+    String? storageNotice,
+  }) async {
     _settings = settings;
 
-    // 配置目录：放在 exe 同级目录下（便携模式）
     final exeDir = File(Platform.resolvedExecutable).parent.path;
-    _configDir = '$exeDir${Platform.pathSeparator}ssrvpn';
+    _configDir = dataDir ?? '$exeDir${Platform.pathSeparator}ssrvpn';
     _configPath = '$_configDir${Platform.pathSeparator}config.yaml';
     _corePath = '$exeDir${Platform.pathSeparator}mihomo.exe';
     await Directory(_configDir).create(recursive: true);
+    _logFile = File('$_configDir${Platform.pathSeparator}ssrvpn.log');
+    await _rotateLogFile();
     await _proxyService.initialize(_configDir);
     await _terminateOrphanedCores();
 
+    _log('系统: ${Platform.operatingSystemVersion}');
+    _log('程序路径: ${Platform.resolvedExecutable}');
     _log('配置目录: $_configDir');
     _log('核心路径: $_corePath');
+    _log('诊断日志: ${_logFile!.path}');
+    if (storageNotice != null && storageNotice.isNotEmpty) {
+      _log('⚠️ $storageNotice');
+    }
+    if (_proxyService.lastError != null) {
+      _log('⚠️ ${_proxyService.lastError}');
+    }
 
     // 验证核心文件
     final coreFile = File(_corePath);
     if (await coreFile.exists()) {
       final size = await coreFile.length();
       _log('✅ 核心文件存在: ${(size / 1024 / 1024).toStringAsFixed(1)} MB');
+      await _logCoreVersion();
     } else {
       _log('❌ 核心文件不存在: $_corePath');
       _log('请将 mihomo.exe 放到应用目录下');
@@ -66,6 +101,43 @@ class ClashService {
 
     // 预下载 MMDB 文件
     await _ensureMMDB();
+  }
+
+  Future<void> _rotateLogFile() async {
+    final logFile = _logFile;
+    if (logFile == null || !await logFile.exists()) return;
+    if (await logFile.length() < 2 * 1024 * 1024) return;
+
+    final oldFile = File('${logFile.path}.old');
+    if (await oldFile.exists()) await oldFile.delete();
+    await logFile.rename(oldFile.path);
+  }
+
+  Future<void> _logCoreVersion() async {
+    Process? process;
+    try {
+      process = await Process.start(_corePath, ['-v']);
+      final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+      final stderrFuture = process.stderr.transform(utf8.decoder).join();
+      final exitCode = await process.exitCode.timeout(
+        const Duration(seconds: 5),
+      );
+      final output = '${await stdoutFuture}\n${await stderrFuture}'.trim();
+      if (exitCode == 0 && output.isNotEmpty) {
+        _log('核心版本: ${output.replaceAll(RegExp(r'\s+'), ' ')}');
+      } else {
+        final reason = _describeWindowsExitCode(exitCode);
+        _log(
+          '⚠️ 核心版本检查失败，退出码: $exitCode'
+          '${reason == null ? "" : "（$reason）"}',
+        );
+      }
+    } on TimeoutException {
+      process?.kill(ProcessSignal.sigkill);
+      _log('⚠️ 核心版本检查超时，可能被安全软件拦截');
+    } catch (e) {
+      _log('⚠️ 核心无法执行: $e');
+    }
   }
 
   /// Cleans up cores left behind if the previous app process was terminated.
@@ -76,24 +148,53 @@ class ClashService {
 \$target = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$encodedPath'))
 Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
   Where-Object { \$_.ExecutablePath -eq \$target } |
-  ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }
+  ForEach-Object {
+    Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue
+    \$_.ProcessId
+  }
 ''';
     try {
-      final result = await Process.run(
-        'powershell',
-        [
-          '-NoLogo',
-          '-NoProfile',
-          '-NonInteractive',
-          '-Command',
-          script,
-        ],
+      final result = await _runPowerShell(
+        script,
+        timeout: const Duration(seconds: 8),
       );
-      if (result.exitCode == 0) {
+      if (result.exitCode == 0 && result.stdout.toString().trim().isNotEmpty) {
         _log('已清理遗留的 Mihomo 进程');
       }
     } catch (e) {
       _log('清理遗留核心失败: $e');
+    }
+  }
+
+  Future<ProcessResult> _runPowerShell(
+    String script, {
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    Process? process;
+    try {
+      process = await Process.start('powershell', [
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        script,
+      ]);
+      final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+      final stderrFuture = process.stderr.transform(utf8.decoder).join();
+      final exitCode = await process.exitCode.timeout(
+        timeout,
+        onTimeout: () {
+          process?.kill(ProcessSignal.sigkill);
+          return 124;
+        },
+      );
+
+      final stdout = await stdoutFuture;
+      final stderr = exitCode == 124 ? '电脑性能不足，请重新连接' : await stderrFuture;
+      return ProcessResult(process.pid, exitCode, stdout, stderr);
+    } catch (_) {
+      process?.kill(ProcessSignal.sigkill);
+      rethrow;
     }
   }
 
@@ -127,7 +228,8 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
       await temp.writeAsBytes(bytes, flush: true);
       await temp.rename(file.path);
       _log(
-          '✅ MMDB 已从内置资源解压 (${(bytes.length / 1024 / 1024).toStringAsFixed(1)} MB)');
+        '✅ MMDB 已从内置资源解压 (${(bytes.length / 1024 / 1024).toStringAsFixed(1)} MB)',
+      );
     } catch (e) {
       _log('⚠️ MMDB 资源复制失败: $e');
       _log('❌ MMDB 不可用，GEOIP 规则将跳过');
@@ -198,6 +300,103 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
 
   /// YAML 单引号字符串转义
   String _quote(String name) => "'${name.replaceAll("'", "''")}'";
+
+  List<String> _buildForceProxyRules(AppSettings settings) {
+    final hosts = <String>{};
+    final rules = <String>[];
+    for (final site in settings.forceProxySites) {
+      final host = AppSettings.extractForceProxyHost(site);
+      if (host == null || !hosts.add(host)) continue;
+
+      final address = InternetAddress.tryParse(host);
+      if (address == null) {
+        rules.add('DOMAIN-SUFFIX,$host,PROXY');
+      } else if (address.type == InternetAddressType.IPv6) {
+        rules.add('IP-CIDR6,$host/128,PROXY,no-resolve');
+      } else {
+        rules.add('IP-CIDR,$host/32,PROXY,no-resolve');
+      }
+    }
+    return rules;
+  }
+
+  /// Resolves transient port conflicts without changing the user's saved
+  /// preferences. The returned settings must be used to generate the config.
+  Future<AppSettings> prepareForStart(AppSettings preferred) async {
+    final reserved = <int>{};
+    final proxyPort = await _findAvailablePort(
+      preferred.proxyPort,
+      reserved,
+    );
+    reserved.add(proxyPort);
+    final socksPort = await _findAvailablePort(
+      preferred.socksPort,
+      reserved,
+    );
+    reserved.add(socksPort);
+    final apiPort = await _findAvailablePort(
+      preferred.apiPort,
+      reserved,
+    );
+
+    final runtime = preferred.copyWith(
+      proxyPort: proxyPort,
+      socksPort: socksPort,
+      apiPort: apiPort,
+    );
+    _settings = runtime;
+
+    if (proxyPort != preferred.proxyPort ||
+        socksPort != preferred.socksPort ||
+        apiPort != preferred.apiPort) {
+      _log(
+        '⚠️ 检测到端口占用，已为本次连接自动调整: '
+        '代理 ${preferred.proxyPort}→$proxyPort, '
+        'SOCKS ${preferred.socksPort}→$socksPort, '
+        'API ${preferred.apiPort}→$apiPort',
+      );
+    } else {
+      _log('端口检查通过: $proxyPort / $socksPort / $apiPort');
+    }
+    return runtime;
+  }
+
+  Future<int> _findAvailablePort(int preferred, Set<int> reserved) async {
+    final candidates = <int>[
+      preferred,
+      for (var offset = 1; offset <= 50; offset++)
+        if (preferred + offset <= 65535) preferred + offset,
+    ];
+    for (final port in candidates) {
+      if (reserved.contains(port)) continue;
+      if (await _canBindPort(port)) return port;
+    }
+
+    while (true) {
+      final socket = await ServerSocket.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+        shared: false,
+      );
+      final port = socket.port;
+      await socket.close();
+      if (!reserved.contains(port)) return port;
+    }
+  }
+
+  Future<bool> _canBindPort(int port) async {
+    try {
+      final socket = await ServerSocket.bind(
+        InternetAddress.loopbackIPv4,
+        port,
+        shared: false,
+      );
+      await socket.close();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// 生成 Clash 配置
   String generateClashConfig(
@@ -320,6 +519,9 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
     // Rules
     result.writeln();
     result.writeln('rules:');
+    for (final rule in _buildForceProxyRules(settings)) {
+      result.writeln('  - ${_quote(rule)}');
+    }
     result.writeln("  - 'DOMAIN-SUFFIX,cn,DIRECT'");
     if (mmdbExists) {
       result.writeln("  - 'GEOIP,CN,DIRECT'");
@@ -334,7 +536,7 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
   Future<void> writeConfig(String configContent) async {
     final file = File(_configPath);
     final temp = File('$_configPath.tmp');
-    await temp.writeAsString(configContent, flush: true);
+    await temp.writeAsString(configContent);
     await temp.rename(file.path);
   }
 
@@ -355,6 +557,8 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
   Future<bool> _startInternal() async {
     final stopping = _stopOperation;
     if (stopping != null) await stopping;
+    _lastStartError = null;
+    _lastHealthCheckError = null;
 
     if (_isRunning) {
       try {
@@ -365,72 +569,119 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
     }
 
     try {
+      final startupWatch = Stopwatch()..start();
       _log('🚀 启动 Mihomo...');
 
       // 检查核心文件
       if (!File(_corePath).existsSync()) {
         _log('❌ 核心文件不存在: $_corePath');
         _log('请下载 mihomo-windows-amd64 并重命名为 mihomo.exe 放到应用目录');
+        _lastStartError = '找不到 mihomo.exe，文件可能未完整解压或被安全软件隔离';
         return false;
       }
 
       if (!File(_configPath).existsSync()) {
         _log('❌ 配置文件不存在: $_configPath');
+        _lastStartError = '找不到生成的 Mihomo 配置文件';
         return false;
+      }
+
+      if (_settings.enableTun) {
+        final isAdministrator = await _isAdministrator();
+        if (isAdministrator == false) {
+          _lastStartError = 'TUN 模式需要以管理员身份运行 SSRVPN';
+          _log('❌ $_lastStartError');
+          return false;
+        }
+        if (isAdministrator == null) {
+          _log('⚠️ 无法确认管理员权限，将继续尝试启动 TUN 模式');
+        }
       }
 
       // 创建 tmp 目录
       final tmpDir = '$_configDir${Platform.pathSeparator}tmp';
       await Directory(tmpDir).create(recursive: true);
+      final environment = {'TMPDIR': tmpDir, 'TMP': tmpDir, 'TEMP': tmpDir};
+
+      if (!await _validateConfig(environment)) {
+        _lastStartError ??= 'Mihomo 配置校验失败，请打开运行日志查看具体配置错误';
+        return false;
+      }
 
       // 启动 mihomo 子进程（所有数据都在便携目录内）
-      _coreProcess = await Process.start(
+      final processStartWatch = Stopwatch()..start();
+      final startedProcess = await Process.start(
         _corePath,
         ['-d', _configDir, '-f', _configPath],
         mode: ProcessStartMode.normal,
         includeParentEnvironment: true,
-        environment: {
-          'TMPDIR': tmpDir,
-          'TMP': tmpDir,
-          'TEMP': tmpDir,
-        },
+        environment: environment,
       );
+      _log('Mihomo 进程已创建，耗时 ${processStartWatch.elapsedMilliseconds}ms');
+      _coreProcess = startedProcess;
+      int? startupExitCode;
+      final startupOutput = <String>[];
 
       // 监听子进程输出
-      _coreProcess!.stdout.transform(utf8.decoder).listen((data) {
-        _log(data.trim());
+      startedProcess.stdout
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((line) {
+        final message = line.trim();
+        if (message.isEmpty) return;
+        startupOutput.add(message);
+        if (startupOutput.length > 30) startupOutput.removeAt(0);
+        _log('[mihomo] $message');
       });
-      _coreProcess!.stderr.transform(utf8.decoder).listen((data) {
-        _log('[stderr] ${data.trim()}');
+      startedProcess.stderr
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((line) {
+        final message = line.trim();
+        if (message.isEmpty) return;
+        startupOutput.add(message);
+        if (startupOutput.length > 30) startupOutput.removeAt(0);
+        _log('[mihomo stderr] $message');
       });
 
       // 监听子进程退出
-      _coreProcess!.exitCode.then((code) {
+      startedProcess.exitCode.then((code) {
+        startupExitCode = code;
+        if (!identical(_coreProcess, startedProcess) || _stoppingCore) return;
+
+        _log('❌ Mihomo 进程已退出，退出码: $code');
         if (_isRunning) {
           _isRunning = false;
-          _log('核心进程退出，退出码: $code');
           _notifyStatusChanged();
           _proxyService.clearSystemProxy();
         }
       });
 
-      // 等待核心启动
-      await Future.delayed(const Duration(seconds: 2));
+      // 慢速磁盘或首次启动可能超过 2 秒，轮询等待 API 就绪。
+      var healthy = false;
+      final deadline = DateTime.now().add(const Duration(seconds: 15));
+      while (DateTime.now().isBefore(deadline) && startupExitCode == null) {
+        healthy = await _healthCheck();
+        if (healthy) break;
+        await Future.delayed(const Duration(milliseconds: 250));
+      }
 
-      // 健康检查
-      final healthy = await _healthCheck();
       if (healthy) {
         _isRunning = true;
-        _log('✅ Mihomo 启动成功');
+        _log('✅ Mihomo API 就绪，耗时 ${startupWatch.elapsedMilliseconds}ms');
 
         // 设置系统代理（非 TUN 模式时）
         if (!_settings.enableTun) {
+          final proxyWatch = Stopwatch()..start();
           final proxySet = await _proxyService.setSystemProxy(
-              '127.0.0.1', _settings.proxyPort);
+            '127.0.0.1',
+            _settings.proxyPort,
+          );
           if (proxySet) {
-            _log('✅ 系统代理已设置');
+            _log('✅ 系统代理已设置，耗时 ${proxyWatch.elapsedMilliseconds}ms');
           } else {
-            _log('❌ 系统代理设置失败，连接已取消');
+            _lastStartError = _proxyService.lastError ?? 'Windows 系统代理设置失败';
+            _log('❌ $_lastStartError，连接已取消');
             await _stopInternal();
             return false;
           }
@@ -440,15 +691,78 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
         _startStatusMonitor();
         return true;
       } else {
-        _log('❌ 核心启动后健康检查失败');
+        if (startupExitCode != null) {
+          final detail = startupOutput.isEmpty ? '' : ': ${startupOutput.last}';
+          _lastStartError = 'Mihomo 提前退出（退出码 $startupExitCode）$detail';
+          _log('❌ 核心启动失败: $_lastStartError');
+        } else {
+          final detail = _lastHealthCheckError ?? 'Mihomo API 未在 15 秒内就绪';
+          _lastStartError = '电脑性能不足，请重新连接';
+          _log(
+            '❌ 核心启动后健康检查失败: '
+            '$detail',
+          );
+        }
         await _stopInternal();
         return false;
       }
     } catch (e, stack) {
+      _lastStartError = _friendlyStartException(e);
       _log('❌ 启动异常: $e');
       _log('堆栈: $stack');
       await _stopInternal();
       return false;
+    }
+  }
+
+  Future<bool?> _isAdministrator() async {
+    if (!Platform.isWindows) return null;
+    const script = r'''
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = [Security.Principal.WindowsPrincipal]::new($identity)
+$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+''';
+    try {
+      final result = await _runPowerShell(
+        script,
+        timeout: const Duration(seconds: 5),
+      );
+      if (result.exitCode != 0) return null;
+      final output = result.stdout.toString().trim().toLowerCase();
+      if (output == 'true') return true;
+      if (output == 'false') return false;
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _friendlyStartException(Object error) {
+    final message = error.toString();
+    final lower = message.toLowerCase();
+    if (lower.contains('access is denied') ||
+        lower.contains('permission denied') ||
+        lower.contains('拒绝访问')) {
+      return '无法执行 Mihomo，文件可能被安全软件拦截或当前目录没有执行权限';
+    }
+    if (lower.contains('not a valid win32') || lower.contains('不是有效的 win32')) {
+      return 'Mihomo 与这台电脑的 Windows 架构不兼容，本版本仅支持 64 位 Windows';
+    }
+    return '启动 Mihomo 时发生异常: $message';
+  }
+
+  String? _describeWindowsExitCode(int exitCode) {
+    switch (exitCode) {
+      case -1073741819: // 0xC0000005
+        return '访问冲突，通常是 CPU 指令集或旧版 Windows 兼容问题，也可能被安全软件注入拦截';
+      case -1073741795: // 0xC000001D
+        return '非法指令，当前 CPU 不支持此核心使用的指令集';
+      case -1073741515: // 0xC0000135
+        return '缺少运行库或依赖 DLL';
+      case -1073741701: // 0xC000007B
+        return '程序或依赖 DLL 的 32/64 位架构不匹配';
+      default:
+        return null;
     }
   }
 
@@ -477,6 +791,7 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
     _statusTimer = null;
 
     if (_coreProcess != null) {
+      _stoppingCore = true;
       try {
         _coreProcess!.kill(ProcessSignal.sigterm);
         // 等待进程退出
@@ -489,12 +804,17 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
         );
       } catch (e) {
         _log('停止异常: $e');
+      } finally {
+        _stoppingCore = false;
       }
       _coreProcess = null;
     }
 
     // 清除系统代理（在进程停止后执行）
-    await _proxyService.clearSystemProxy();
+    final proxyCleared = await _proxyService.clearSystemProxy();
+    if (!proxyCleared && _proxyService.lastError != null) {
+      _log('⚠️ ${_proxyService.lastError}');
+    }
 
     _isRunning = false;
     _notifyStatusChanged();
@@ -517,11 +837,70 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
   Future<bool> _healthCheck() async {
     try {
       final url = Uri.parse('http://127.0.0.1:${_settings.apiPort}/version');
-      final response = await http
+      final response = await _apiClient
           .get(url, headers: _apiHeaders())
           .timeout(const Duration(seconds: 3));
-      return response.statusCode == 200;
+      if (response.statusCode == 200) {
+        _lastHealthCheckError = null;
+        return true;
+      }
+      _lastHealthCheckError =
+          'API 返回 HTTP ${response.statusCode}，端口 ${_settings.apiPort}';
+      return false;
     } catch (e) {
+      _lastHealthCheckError = '无法连接 127.0.0.1:${_settings.apiPort} ($e)';
+      return false;
+    }
+  }
+
+  Future<bool> _validateConfig(Map<String, String> environment) async {
+    _log('正在校验 Mihomo 配置...');
+    final watch = Stopwatch()..start();
+    Process? process;
+    try {
+      process = await Process.start(
+        _corePath,
+        ['-t', '-d', _configDir, '-f', _configPath],
+        includeParentEnvironment: true,
+        environment: environment,
+      );
+      final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+      final stderrFuture = process.stderr.transform(utf8.decoder).join();
+      final exitCode = await process.exitCode.timeout(
+        const Duration(seconds: 40),
+        onTimeout: () {
+          process?.kill(ProcessSignal.sigkill);
+          return -1;
+        },
+      );
+      final stdout = (await stdoutFuture).trim();
+      final stderr = (await stderrFuture).trim();
+      if (stdout.isNotEmpty) _log('[配置校验] $stdout');
+      if (stderr.isNotEmpty) _log('[配置校验 stderr] $stderr');
+      if (exitCode == 0) {
+        _log('✅ Mihomo 配置校验通过，耗时 ${watch.elapsedMilliseconds}ms');
+        return true;
+      }
+      if (exitCode == -1) {
+        _lastStartError = '电脑性能不足，请重新连接';
+        _log('❌ $_lastStartError');
+        return false;
+      }
+      final reason = _describeWindowsExitCode(exitCode);
+      final detail = stderr.isNotEmpty ? stderr : stdout;
+      if (reason != null) {
+        _lastStartError = 'Mihomo 无法在此电脑运行: $reason';
+      } else if (detail.isNotEmpty) {
+        _lastStartError = 'Mihomo 配置校验失败: $detail';
+      }
+      _log(
+        '❌ Mihomo 配置校验失败，退出码: $exitCode'
+        '${reason == null ? "" : "（$reason）"}',
+      );
+      return false;
+    } catch (e) {
+      process?.kill(ProcessSignal.sigkill);
+      _log('❌ 无法执行 Mihomo 配置校验: $e');
       return false;
     }
   }
@@ -540,8 +919,11 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
   }
 
   /// 测试延迟 (TCP 连接)
-  Future<int> testLatency(String server, int port,
-      {int timeoutMs = 5000}) async {
+  Future<int> testLatency(
+    String server,
+    int port, {
+    int timeoutMs = 5000,
+  }) async {
     final stopwatch = Stopwatch()..start();
     try {
       final socket = await Socket.connect(
@@ -582,7 +964,7 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
       _log('切换代理: group=$groupName, node=$nodeName');
       _log('API URL: $url');
 
-      final response = await http
+      final response = await _apiClient
           .put(
             Uri.parse(url),
             headers: _apiHeaders({'Content-Type': 'application/json'}),
@@ -596,7 +978,7 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
         _log('✅ 代理切换成功: $nodeName');
         // 断开现有连接，使新代理生效
         try {
-          await http
+          await _apiClient
               .delete(
                 Uri.parse(_apiUrl('/connections')),
                 headers: _apiHeaders(),
@@ -640,6 +1022,20 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
   void _log(String message) {
     _logBuffer = '$message\n$_logBuffer';
     if (_logBuffer.length > 10000) _logBuffer = _logBuffer.substring(0, 10000);
+    final logFile = _logFile;
+    if (logFile != null) {
+      final line = '[${DateTime.now().toIso8601String()}] $message\r\n';
+      _pendingLogWrite = _pendingLogWrite
+          .then(
+            (_) => logFile.writeAsString(
+              line,
+              mode: FileMode.append,
+              flush: true,
+            ),
+          )
+          .then<void>((_) {})
+          .catchError((Object _, StackTrace __) {});
+    }
     onLog?.call(message);
     debugPrint('[Clash] $message');
   }

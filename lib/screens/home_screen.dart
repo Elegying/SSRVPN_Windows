@@ -33,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final Map<String, int> _latencies = {};
   int _lastRevision = -1;
   bool _disposed = false;
+  bool _hasShownInitialSubscriptionDialog = false;
   ClashService? _clashService;
   Timer? _updateCheckTimer;
 
@@ -66,13 +67,15 @@ class _HomeScreenState extends State<HomeScreen> {
         nodes,
         settingsService.settings.lastSelectedNodeName,
       );
-      clashService.updateSettings(settingsService.settings);
+      await clashService.stop();
+      final runtimeSettings = await clashService.prepareForStart(
+        settingsService.settings,
+      );
       final config = clashService.generateClashConfig(
         rawYaml,
-        settingsService.settings,
+        runtimeSettings,
         preferredNodeName: preferredNode?.name,
       );
-      await clashService.stop();
       await clashService.writeConfig(config);
       final success = await clashService.start();
       if (success && preferredNode != null) {
@@ -127,6 +130,12 @@ class _HomeScreenState extends State<HomeScreen> {
     if (clashService.isRunning) setState(() => _isConnected = true);
 
     clashService.addStatusListener(_handleClashStatusChanged);
+
+    if (subService.allNodes.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_disposed) _showInitialSubscriptionDialog();
+      });
+    }
   }
 
   void _handleClashStatusChanged() {
@@ -141,6 +150,493 @@ class _HomeScreenState extends State<HomeScreen> {
         _selectedNode = null;
       }
     });
+  }
+
+  Future<void> _showInitialSubscriptionDialog() async {
+    if (_hasShownInitialSubscriptionDialog) return;
+    _hasShownInitialSubscriptionDialog = true;
+
+    final controller = TextEditingController();
+    String? inputError;
+    bool isSubmitting = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
+        final titleColor =
+            isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
+        final subtitleColor =
+            isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
+
+        return StatefulBuilder(
+          builder: (builderContext, setDialogState) {
+            Future<void> submit() async {
+              final input = controller.text.trim();
+              final subService = builderContext.read<SubscriptionService>();
+              final settingsService = builderContext.read<SettingsService>();
+              final navigator = Navigator.of(dialogContext);
+              final messenger = ScaffoldMessenger.of(builderContext);
+              final validationError = _validateSubscriptionInput(
+                input,
+                subService,
+              );
+              if (validationError != null) {
+                setDialogState(() => inputError = validationError);
+                return;
+              }
+
+              setDialogState(() {
+                inputError = null;
+                isSubmitting = true;
+              });
+
+              try {
+                final exists =
+                    subService.subscriptions.any((sub) => sub.url == input);
+                if (!exists) {
+                  await subService.addSubscription(
+                    subService.isSsrLink(input) ? 'SSR节点' : 'SSRVPN.VIP',
+                    input,
+                  );
+                }
+
+                final yaml = await subService.refreshAllSubscriptions();
+                if (yaml == null ||
+                    yaml.trim().isEmpty ||
+                    subService.allNodes.isEmpty) {
+                  throw Exception('未获取到可用节点');
+                }
+
+                if (!mounted || _disposed) return;
+                final nodes = List<ProxyNode>.from(subService.allNodes);
+                setState(() {
+                  _nodes = nodes;
+                  _lastRevision = subService.revision;
+                  _selectedNode = _resolveDefaultNode(
+                    nodes,
+                    settingsService.settings.lastSelectedNodeName,
+                  );
+                });
+
+                navigator.pop();
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text('节点已更新，获取到 ${nodes.length} 个节点'),
+                    backgroundColor: AppTheme.successColor,
+                  ),
+                );
+              } catch (e) {
+                if (!mounted || _disposed) return;
+                final msg = e.toString().replaceFirst('Exception: ', '');
+                setDialogState(() {
+                  inputError = '更新失败: $msg';
+                  isSubmitting = false;
+                });
+              }
+            }
+
+            return Dialog(
+              backgroundColor: isDark ? const Color(0xFF1A1D26) : Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryColor.withAlpha(22),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.rss_feed_rounded,
+                              color: AppTheme.primaryColor,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              '添加订阅',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: titleColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        '请粘贴你的SSR代码或订阅链接',
+                        style: TextStyle(fontSize: 13, color: subtitleColor),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: controller,
+                        minLines: 1,
+                        maxLines: 4,
+                        enabled: !isSubmitting,
+                        decoration: InputDecoration(
+                          hintText: 'ssr:// 或 https://...',
+                          prefixIcon: const Icon(Icons.link_rounded),
+                          errorText: inputError,
+                          filled: true,
+                          fillColor: isDark
+                              ? Colors.white.withAlpha(6)
+                              : Colors.black.withAlpha(4),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: isDark
+                                  ? AppTheme.darkBorder
+                                  : AppTheme.lightBorder,
+                            ),
+                          ),
+                        ),
+                        keyboardType: TextInputType.url,
+                        onSubmitted: (_) {
+                          if (!isSubmitting) submit();
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextButton(
+                              onPressed: isSubmitting
+                                  ? null
+                                  : () => Navigator.of(dialogContext).pop(),
+                              child: const Text('取消'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: isSubmitting ? null : submit,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primaryColor,
+                                foregroundColor: Colors.white,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              child: isSubmitting
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Text('确定'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    controller.dispose();
+  }
+
+  String? _validateSubscriptionInput(
+    String input,
+    SubscriptionService subService,
+  ) {
+    if (input.isEmpty) return '请粘贴你的SSR代码或订阅链接';
+    if (subService.isSsrLink(input)) return null;
+
+    final uri = Uri.tryParse(input);
+    if (uri == null ||
+        !uri.hasAuthority ||
+        (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return '请输入有效的 SSR 代码或 HTTP/HTTPS 订阅链接';
+    }
+    return null;
+  }
+
+  Future<void> _applyNetworkSetting(
+    Future<void> Function(SettingsService settings) update,
+  ) async {
+    if (_isConnecting) return;
+    final clashService = context.read<ClashService>();
+    final settingsService = context.read<SettingsService>();
+    final wasConnected = clashService.isRunning || _isConnected;
+
+    if (wasConnected) {
+      setState(() {
+        _isConnecting = true;
+        _errorMessage = null;
+      });
+      await clashService.stop();
+    }
+
+    await update(settingsService);
+    clashService.updateSettings(settingsService.settings);
+
+    if (!mounted || _disposed) return;
+    setState(() {
+      _isConnecting = false;
+      _isConnected = false;
+      _selectedNode = null;
+      _latencies.clear();
+    });
+
+    if (wasConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('网络设置已更新，请重新连接')),
+      );
+    }
+  }
+
+  Future<void> _showForceProxySitesDialog() async {
+    final settings = context.read<SettingsService>().settings;
+    final savedSites = AppSettings.normalizeForceProxySites(
+      settings.forceProxySites,
+    );
+    final controllers = List.generate(
+      AppSettings.forceProxySiteLimit,
+      (index) => TextEditingController(text: savedSites[index]),
+    );
+    String? errorText;
+
+    final sites = await showDialog<List<String>>(
+      context: context,
+      builder: (dialogContext) {
+        final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
+        final titleColor =
+            isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
+        final subtitleColor =
+            isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
+
+        return StatefulBuilder(
+          builder: (builderContext, setDialogState) {
+            void submit() {
+              final values = controllers
+                  .map((controller) => controller.text.trim())
+                  .toList();
+              for (var i = 0; i < values.length; i++) {
+                final message = _validateForceProxySite(values[i]);
+                if (message != null) {
+                  setDialogState(() => errorText = '第 ${i + 1} 个输入框：$message');
+                  return;
+                }
+              }
+              Navigator.of(dialogContext).pop(values);
+            }
+
+            return Dialog(
+              backgroundColor: isDark ? const Color(0xFF1A1D26) : Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.of(dialogContext).viewInsets.bottom,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    AppTheme.primaryColor,
+                                    AppTheme.accentColor,
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.add_link_rounded,
+                                color: Colors.white,
+                                size: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                '添加强制代理网站',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: titleColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          '默认规则已涵盖绝大部分网站，如出现个别网站无法访问的情况，再使用此功能，粘贴需要强制代理的网址：',
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.45,
+                            color: subtitleColor,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        for (var i = 0;
+                            i < AppSettings.forceProxySiteLimit;
+                            i++) ...[
+                          TextField(
+                            controller: controllers[i],
+                            maxLines: 1,
+                            keyboardType: TextInputType.url,
+                            textInputAction:
+                                i == AppSettings.forceProxySiteLimit - 1
+                                    ? TextInputAction.done
+                                    : TextInputAction.next,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.deny(
+                                RegExp(r'[\r\n]'),
+                              ),
+                            ],
+                            decoration: GlassInputDecoration(
+                              isDark: isDark,
+                              labelText: '网址 ${i + 1}',
+                              hintText: 'https://example.com',
+                              prefixIcon: const Icon(Icons.language, size: 18),
+                            ),
+                            onSubmitted: (_) {
+                              if (i == AppSettings.forceProxySiteLimit - 1) {
+                                submit();
+                              }
+                            },
+                          ),
+                          if (i != AppSettings.forceProxySiteLimit - 1)
+                            const SizedBox(height: 10),
+                        ],
+                        if (errorText != null) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            errorText!,
+                            style: const TextStyle(
+                              color: AppTheme.errorColor,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextButton(
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(),
+                                child: const Text('取消'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: submit,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primaryColor,
+                                  foregroundColor: Colors.white,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                child: const Text('确定'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    for (final controller in controllers) {
+      controller.dispose();
+    }
+    if (sites == null || !mounted || _disposed) return;
+    await _applyForceProxySites(sites);
+  }
+
+  String? _validateForceProxySite(String value) {
+    if (value.trim().isEmpty) return null;
+    if (RegExp(r'[\s,，;；]').hasMatch(value.trim())) {
+      return '一个输入框只能填写一个网址';
+    }
+    if (AppSettings.extractForceProxyHost(value) == null) {
+      return '请输入有效的网址或域名';
+    }
+    return null;
+  }
+
+  Future<void> _applyForceProxySites(List<String> sites) async {
+    final settingsService = context.read<SettingsService>();
+    final clashService = context.read<ClashService>();
+    await settingsService.updateForceProxySites(sites);
+    clashService.updateSettings(settingsService.settings);
+
+    final shouldReload = _isConnected && !_isConnecting;
+    var reloadSucceeded = false;
+    if (shouldReload) {
+      await _reloadConfig();
+      reloadSucceeded = mounted &&
+          !_disposed &&
+          _isConnected &&
+          context.read<ClashService>().isRunning;
+    }
+    if (!mounted || _disposed) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          shouldReload
+              ? reloadSucceeded
+                  ? '强制代理网站已实时生效'
+                  : '强制代理网站已保存，当前连接重载失败，请重新连接'
+              : '强制代理网站已保存',
+        ),
+        backgroundColor:
+            shouldReload && !reloadSucceeded ? AppTheme.warningColor : null,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _handleConnectToggle() async {
@@ -175,15 +671,17 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       try {
-        clashService.updateSettings(settingsService.settings);
         final nodes = List<ProxyNode>.from(subService.allNodes);
         final autoSelect = _resolveDefaultNode(
           nodes,
           settingsService.settings.lastSelectedNodeName,
         );
+        final runtimeSettings = await clashService.prepareForStart(
+          settingsService.settings,
+        );
         final config = clashService.generateClashConfig(
           rawYaml,
-          settingsService.settings,
+          runtimeSettings,
           preferredNodeName: autoSelect?.name,
         );
         await clashService.writeConfig(config);
@@ -205,7 +703,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _checkUpdateDelayed();
         } else {
           setState(() {
-            _errorMessage = '连接失败: 无法启动核心';
+            _errorMessage = '连接失败: ${clashService.lastStartError ?? "无法启动核心"}';
             _isConnecting = false;
           });
         }
@@ -671,11 +1169,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   isConnecting: _isConnecting,
                   onTap: _handleConnectToggle,
                 ),
-                const SizedBox(width: 24),
+                const SizedBox(width: 18),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      _ForceProxyButton(
+                        onTap: _showForceProxySitesDialog,
+                        enabled: !_isConnecting,
+                      ),
+                      const SizedBox(height: 12),
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
                         child: Text(
@@ -696,6 +1199,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ? AppTheme.successColor
                                 : textColor,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -771,14 +1276,19 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            _buildModeInfo(isDark, subColor, settings),
+            _buildConnectionOptions(isDark, textColor, subColor, settings),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildModeInfo(bool isDark, Color subColor, AppSettings settings) {
+  Widget _buildConnectionOptions(
+    bool isDark,
+    Color textColor,
+    Color subColor,
+    AppSettings settings,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -789,49 +1299,168 @@ class _HomeScreenState extends State<HomeScreen> {
           width: 0.5,
         ),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppTheme.accentColor.withAlpha(25),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              settings.enableTun
-                  ? Icons.wifi_tethering_rounded
-                  : Icons.language_rounded,
-              size: 18,
-              color: AppTheme.accentColor,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  settings.enableTun ? 'TUN 模式' : '系统代理模式',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: isDark
-                        ? AppTheme.darkTextPrimary
-                        : AppTheme.lightTextPrimary,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final modeControl = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '代理模式',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: textColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<ProxyMode>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment<ProxyMode>(
+                      value: ProxyMode.global,
+                      icon: Icon(Icons.public_rounded, size: 16),
+                      label: Text('全局'),
+                    ),
+                    ButtonSegment<ProxyMode>(
+                      value: ProxyMode.rule,
+                      icon: Icon(Icons.route_rounded, size: 16),
+                      label: Text('规则'),
+                    ),
+                  ],
+                  selected: {settings.proxyMode},
+                  onSelectionChanged: _isConnecting
+                      ? null
+                      : (selection) {
+                          _applyNetworkSetting(
+                            (service) =>
+                                service.updateProxyMode(selection.first),
+                          );
+                        },
+                ),
+              ),
+            ],
+          );
+
+          Widget tunChoice({
+            required bool selected,
+            required bool enableTun,
+            required IconData icon,
+            required String label,
+          }) {
+            final disabled = _isConnecting || selected;
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: disabled
+                  ? null
+                  : () {
+                      _applyNetworkSetting(
+                        (service) => service.updateEnableTun(enableTun),
+                      );
+                    },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                margin: const EdgeInsets.only(top: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? AppTheme.primaryColor.withAlpha(isDark ? 28 : 18)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: selected
+                        ? AppTheme.primaryColor.withAlpha(120)
+                        : (isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  settings.enableTun
-                      ? '虚拟网卡代理所有流量（需管理员权限）'
-                      : '通过系统代理设置转发流量（无需管理员）',
-                  style: TextStyle(fontSize: 12, color: subColor),
+                child: Row(
+                  children: [
+                    Icon(
+                      icon,
+                      size: 18,
+                      color: selected ? AppTheme.primaryColor : subColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        label,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.25,
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w500,
+                          color: selected ? AppTheme.primaryColor : textColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      selected
+                          ? Icons.check_circle_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      size: 18,
+                      color: selected ? AppTheme.primaryColor : subColor,
+                    ),
+                  ],
                 ),
+              ),
+            );
+          }
+
+          final tunControl = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '代理方式',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: textColor,
+                ),
+              ),
+              tunChoice(
+                selected: !settings.enableTun,
+                enableTun: false,
+                icon: Icons.language_rounded,
+                label: '系统代理（默认）',
+              ),
+              tunChoice(
+                selected: settings.enableTun,
+                enableTun: true,
+                icon: Icons.wifi_tethering_rounded,
+                label: 'TUN 模式（需管理员权限）',
+              ),
+            ],
+          );
+
+          if (constraints.maxWidth < 520) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                modeControl,
+                const SizedBox(height: 12),
+                tunControl,
               ],
-            ),
-          ),
-        ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: modeControl),
+              Container(
+                width: 1,
+                height: 52,
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+              ),
+              Expanded(child: tunControl),
+            ],
+          );
+        },
       ),
     );
   }
@@ -959,6 +1588,62 @@ class _HomeScreenState extends State<HomeScreen> {
           isDark: isDark,
         );
       },
+    );
+  }
+}
+
+class _ForceProxyButton extends StatelessWidget {
+  final VoidCallback onTap;
+  final bool enabled;
+
+  const _ForceProxyButton({
+    required this.onTap,
+    required this.enabled,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Opacity(
+      opacity: enabled ? 1 : 0.55,
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 168),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppTheme.primaryColor.withAlpha(isDark ? 24 : 16),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: AppTheme.primaryColor.withAlpha(isDark ? 70 : 55),
+            ),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.add_link_rounded,
+                size: 16,
+                color: AppTheme.primaryColor,
+              ),
+              SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  '添加强制代理网站',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.2,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

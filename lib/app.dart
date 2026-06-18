@@ -7,7 +7,6 @@ import 'services/clash_service.dart' as clash;
 import 'services/subscription_service.dart';
 import 'services/tray_manager.dart';
 import 'screens/home_screen.dart';
-import 'screens/settings_screen.dart';
 import 'screens/subscription_screen.dart';
 import 'theme/app_theme.dart';
 
@@ -48,7 +47,11 @@ class _SSRVpnAppState extends State<SSRVpnApp> with WindowListener {
     try {
       _settingsService = await SettingsService.getInstance();
       _clashService = clash.ClashService();
-      await _clashService!.init(_settingsService!.settings);
+      await _clashService!.init(
+        _settingsService!.settings,
+        dataDir: _settingsService!.dataDir,
+        storageNotice: _settingsService!.storageNotice,
+      );
       _clashService!.addStatusListener(_handleCoreStatusChanged);
       final appDataDir = _clashService!.configDir;
       _subscriptionService = await SubscriptionService.getInstance(appDataDir);
@@ -88,16 +91,19 @@ class _SSRVpnAppState extends State<SSRVpnApp> with WindowListener {
           final rawYaml = _subscriptionService?.rawYaml;
           if (rawYaml != null && rawYaml.trim().isNotEmpty) {
             final preferredNodeName = _defaultNodeName();
+            final runtimeSettings = await _clashService!.prepareForStart(
+              _settingsService!.settings,
+            );
             final config = _clashService!.generateClashConfig(
               rawYaml,
-              _settingsService!.settings,
+              runtimeSettings,
               preferredNodeName: preferredNodeName,
             );
             await _clashService!.writeConfig(config);
             final started = await _clashService!.start();
             if (started && preferredNodeName != null) {
-              final switched = await _clashService!
-                  .switchProxy('PROXY', preferredNodeName);
+              final switched =
+                  await _clashService!.switchProxy('PROXY', preferredNodeName);
               if (switched) {
                 await _settingsService!
                     .updateLastSelectedNodeName(preferredNodeName);
@@ -311,7 +317,6 @@ class _SSRVpnAppState extends State<SSRVpnApp> with WindowListener {
               children: const [
                 HomeScreen(),
                 SubscriptionScreen(),
-                SettingsScreen(),
               ],
             ),
           ),
@@ -355,14 +360,6 @@ class _SSRVpnAppState extends State<SSRVpnApp> with WindowListener {
               label: '订阅',
               isSelected: _currentIndex == 1,
               onTap: () => setState(() => _currentIndex = 1),
-              isDark: isDark,
-            ),
-            _BottomNavItem(
-              icon: Icons.settings_rounded,
-              activeIcon: Icons.settings_rounded,
-              label: '设置',
-              isSelected: _currentIndex == 2,
-              onTap: () => setState(() => _currentIndex = 2),
               isDark: isDark,
             ),
           ],

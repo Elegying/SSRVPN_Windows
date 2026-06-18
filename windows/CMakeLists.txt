@@ -72,6 +72,15 @@ endif()
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
 
+# Bundle the MSVC runtime for machines that do not already have the Visual C++
+# Redistributable installed. Flutter plugins link against these DLLs.
+if(MSVC)
+  set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION "${BUILD_BUNDLE_DIR}")
+  set(CMAKE_INSTALL_SYSTEM_RUNTIME_COMPONENT Runtime)
+  set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_NO_WARNINGS TRUE)
+  include(InstallRequiredSystemLibraries)
+endif()
+
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 

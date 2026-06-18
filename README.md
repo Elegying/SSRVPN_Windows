@@ -37,7 +37,14 @@ flutter build windows --release
 
 ### 打包为绿色免安装版
 
-构建完成后，将以下文件打包为 ZIP：
+推荐直接使用项目内的打包脚本。它会执行 Release 构建、清理旧产物、校验必需文件、附带 VC++ 运行库并生成 SHA256：
+
+```powershell
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass `
+  -File .\tool\package_windows.ps1
+```
+
+最终产物为 `SSRVPN_Windows_Release.zip`。构建完成后，ZIP 内包含：
 
 ```
 SSRVPN_Windows/
@@ -58,13 +65,13 @@ SSRVPN_Windows/
 
 ## Mihomo 核心
 
-便携版 ZIP 已包含 `mihomo.exe`。自行构建时，可从 GitHub Releases 下载 Windows 版本：
+便携版 ZIP 已包含 `mihomo.exe`。为了兼容旧 CPU 和旧版 Windows，项目使用官方 `mihomo-windows-amd64-v1-go120` 构建。自行更新时可从 GitHub Releases 下载同类版本：
 
 ```
 https://github.com/MetaCubeX/mihomo/releases
 ```
 
-下载后将 `mihomo-windows-amd64.exe` 重命名为 `mihomo.exe`，放到应用目录下。
+下载后解压，将其中的可执行文件重命名为 `mihomo.exe`，放到 `assets` 目录后重新构建。
 
 ## 使用说明
 
@@ -76,7 +83,9 @@ https://github.com/MetaCubeX/mihomo/releases
 
 ### 便携模式
 
-本软件为**绿色免安装版**，所有持久数据（配置、订阅、缓存、日志）都存储在软件根目录的 `ssrvpn` 文件夹内，不写入 AppData。系统代理模式运行期间会临时修改当前用户的 Windows 代理设置，断开或退出时自动恢复原设置。
+本软件为**绿色免安装版**，配置、订阅、缓存和日志默认存储在软件根目录的 `ssrvpn` 文件夹内。系统代理模式运行期间会临时修改当前用户的 Windows 代理设置，断开或退出时自动恢复原设置。
+
+如果程序目录不可写（例如放在受保护目录或只读介质），数据会自动回退到 `%LOCALAPPDATA%\SSRVPN\ssrvpn`。系统代理恢复快照属于当前电脑的运行状态，会单独保存在本机 LocalAppData 中，不会随便携目录复制到其他电脑。
 
 ```
 SSRVPN_Windows_Portable/
