@@ -1,159 +1,137 @@
 # SSRVPN Windows
 
-SSRVPN Windows 版 - 绿色免安装 VPN 客户端
+SSRVPN Windows 是一个基于 Flutter 的绿色免安装代理客户端，内置 Mihomo/Clash Meta 核心，支持系统代理模式和 TUN 模式，适合解压即用、随身携带和多设备复制。
 
 ## 功能特性
 
-- 🎨 与 Android/macOS 版一致的 UI 界面
-- 🔒 支持 SSR/SS/VMess/Trojan 等多种代理协议
-- 📡 支持订阅链接和 ssr:// 链接导入
-- 🚀 基于 Mihomo (Clash Meta) 核心
-- 💻 系统代理模式（无需管理员权限）
-- 🔧 TUN 模式（需管理员权限，全局代理）
-- 📌 系统托盘支持（最小化到托盘继续运行）
-- 🔄 在线更新检查
-- 📦 绿色免安装，解压即用
+- 与 Android/macOS 版一致的 SSRVPN UI
+- 支持订阅链接、Clash YAML、Base64、`ssr://` 等常见配置格式
+- 内置 `mihomo.exe` 代理核心
+- 系统代理模式：无需管理员权限，连接时临时修改当前用户代理
+- TUN 模式：通过虚拟网卡代理更多流量，需要管理员权限
+- 系统托盘：最小化到托盘，右键连接/断开/退出
+- 便携数据目录：配置、订阅、缓存和日志默认保存在程序目录
+- 程序目录不可写时自动回退到 `%LOCALAPPDATA%\SSRVPN\ssrvpn`
+- 在线更新检查
 
-## 构建说明
+## 环境要求
 
-### 环境要求
+- Windows 10/11 x64
+- Flutter 3.0+
+- Visual Studio 2022，需安装 “Desktop development with C++”
+- PowerShell 5+
 
-- Flutter SDK >= 3.0.0
-- Visual Studio 2022 (含 C++ 桌面开发工作负载)
-- Windows 10/11
+## 快速开始
 
-### 构建步骤
-
-```bash
-# 1. 获取依赖
+```powershell
 flutter pub get
-
-# 2. 构建 Release 版本
+flutter test
 flutter build windows --release
-
-# 3. 构建产物位于
-# build\windows\x64\runner\Release\
 ```
 
-### 打包为绿色免安装版
+Release 输出目录：
 
-推荐直接使用项目内的打包脚本。它会执行 Release 构建、清理旧产物、校验必需文件、附带 VC++ 运行库并生成 SHA256：
+```text
+build\windows\x64\runner\Release\
+```
+
+## 打包绿色版
+
+推荐使用项目内置打包脚本。脚本会执行 Release 构建、整理必需文件、附带 VC++ 运行库并生成 SHA256：
 
 ```powershell
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass `
   -File .\tool\package_windows.ps1
 ```
 
-最终产物为 `SSRVPN_Windows_Release.zip`。构建完成后，ZIP 内包含：
+最终产物：
 
+```text
+SSRVPN_Windows_Release.zip
 ```
+
+## 便携目录说明
+
+ZIP 解压后大致结构如下：
+
+```text
 SSRVPN_Windows/
-├── ssrvpn_windows.exe    # 主程序
-├── mihomo.exe            # Mihomo 核心
-├── ssrvpn/               # 配置目录 (首次运行自动创建)
-│   ├── settings.json     # 用户设置
-│   ├── config.yaml       # Clash 配置
-│   ├── subscriptions.json# 订阅列表
-│   └── geoip.metadb      # GeoIP 数据库
-├── data/                 # Flutter 运行时资源
-│   └── flutter_assets/
-│       └── assets/
-│           ├── geoip.metadb.gz
-│           └── icon.ico
-└── *.dll                 # 依赖的动态库
+├── ssrvpn_windows.exe      # 主程序
+├── mihomo.exe              # 代理核心
+├── ssrvpn/                 # 用户数据，首次运行自动创建
+│   ├── settings.json       # 设置
+│   ├── subscriptions.json  # 订阅列表
+│   ├── config.yaml         # Mihomo 配置
+│   ├── ssrvpn.log          # 运行日志
+│   └── geoip.metadb        # GeoIP 数据库
+├── data/                   # Flutter 运行时资源
+└── *.dll                   # 运行依赖
 ```
 
-## Mihomo 核心
-
-便携版 ZIP 已包含 `mihomo.exe`。为了兼容旧 CPU 和旧版 Windows，项目使用官方 `mihomo-windows-amd64-v1-go120` 构建。自行更新时可从 GitHub Releases 下载同类版本：
-
-```
-https://github.com/MetaCubeX/mihomo/releases
-```
-
-下载后解压，将其中的可执行文件重命名为 `mihomo.exe`，放到 `assets` 目录后重新构建。
+可以把整个目录复制到 U 盘或其他电脑直接运行。系统代理恢复快照会单独保存在本机 LocalAppData，避免把一台电脑的代理状态复制到另一台电脑。
 
 ## 使用说明
 
-1. 解压到任意目录
-2. 双击 `ssrvpn_windows.exe` 启动
-3. 点击底部「订阅」标签，添加订阅链接
-4. 点击「全部刷新」获取节点
-5. 返回主页，点击连接按钮
+1. 解压 `SSRVPN_Windows_Release.zip`。
+2. 双击 `ssrvpn_windows.exe`。
+3. 进入「订阅」页面添加订阅地址。
+4. 点击刷新，等待节点解析完成。
+5. 回到首页选择节点并点击连接。
+6. 断开或退出时，应用会尝试恢复连接前的系统代理设置。
 
-### 便携模式
+## 代理模式
 
-本软件为**绿色免安装版**，配置、订阅、缓存和日志默认存储在软件根目录的 `ssrvpn` 文件夹内。系统代理模式运行期间会临时修改当前用户的 Windows 代理设置，断开或退出时自动恢复原设置。
+- 系统代理模式：默认模式，无需管理员权限，适合浏览器和遵循系统代理的软件。
+- TUN 模式：需要管理员权限，覆盖范围更广，适合不走系统代理的软件。
 
-如果程序目录不可写（例如放在受保护目录或只读介质），数据会自动回退到 `%LOCALAPPDATA%\SSRVPN\ssrvpn`。系统代理恢复快照属于当前电脑的运行状态，会单独保存在本机 LocalAppData 中，不会随便携目录复制到其他电脑。
+## Mihomo 核心
 
-```
-SSRVPN_Windows_Portable/
-├── ssrvpn_windows.exe      # 主程序
-├── mihomo.exe              # 代理核心
-├── ssrvpn/                 # 所有用户数据
-│   ├── settings.json       # 用户设置
-│   ├── subscriptions.json  # 订阅列表
-│   ├── config.yaml         # Clash 配置
-│   ├── tmp/                # 临时文件
-│   ├── geoip.metadb        # GeoIP 数据库
-│   └── country.mmdb        # MMDB 数据库
-├── data/                   # 应用资源
-└── *.dll                   # 依赖库
-```
-
-你可以将整个文件夹复制到 U 盘随身携带，换电脑后直接使用，无需重新配置。
-
-### 代理模式
-
-- **系统代理模式**（默认）：通过 Windows 系统代理设置转发流量，无需管理员权限
-- **TUN 模式**：通过虚拟网卡代理所有流量，需要以管理员身份运行
-
-### 系统托盘
-
-- 最小化或关闭窗口时会隐藏到系统托盘（可在设置中关闭）
-- 右键托盘图标可以：显示窗口、连接/断开、退出
-- 托盘图标不可用时不会隐藏窗口，避免程序无法找回
+便携包内置 `mihomo.exe`。如需自行替换核心，可从 Mihomo Releases 下载兼容版本，重命名为 `mihomo.exe` 后放入 `assets` 目录，再重新打包。
 
 ## 项目结构
 
-```
+```text
 lib/
-├── main.dart                 # 入口，窗口初始化
-├── app.dart                  # 应用主框架，导航栏
-├── models/
-│   ├── app_settings.dart     # 设置模型
-│   ├── proxy_node.dart       # 代理节点模型
-│   ├── proxy_group.dart      # 代理组模型
-│   └── subscription.dart     # 订阅模型
-├── screens/
-│   ├── home_screen.dart      # 主页（连接/节点列表）
-│   └── subscription_screen.dart # 订阅管理
+├── main.dart                    # Windows 窗口初始化和入口
+├── app.dart                     # 应用主框架
+├── models/                      # 设置、订阅、节点、代理组模型
+├── screens/                     # 首页、订阅、节点编辑、设置页面
 ├── services/
-│   ├── clash_service.dart    # Mihomo 核心管理
-│   ├── settings_service.dart # 设置持久化
-│   ├── subscription_service.dart # 订阅管理
-│   ├── system_proxy_service.dart # Windows 系统代理
-│   ├── tray_manager.dart     # 系统托盘
-│   └── update_service.dart   # 在线更新
-├── theme/
-│   └── app_theme.dart        # 主题配置
-├── utils/
-│   └── responsive.dart       # 响应式布局
-└── widgets/
-    ├── connection_button.dart # 连接按钮（带动画）
-    ├── glass_container.dart   # 毛玻璃容器
-    └── liquid_glass.dart      # 液态玻璃效果
+│   ├── clash_service.dart       # Mihomo 子进程和 REST API 控制
+│   ├── system_proxy_service.dart# Windows 系统代理设置和恢复
+│   ├── tray_manager.dart        # 系统托盘
+│   └── subscription_service.dart# 订阅解析和持久化
+├── theme/                       # 主题样式
+└── widgets/                     # 通用组件
+
+tool/package_windows.ps1         # 绿色版打包脚本
+assets/mihomo.exe                # 代理核心
 ```
 
-## 技术栈
+## 测试与验证
 
-- **Flutter** - UI 框架
-- **Provider** - 状态管理
-- **Mihomo (Clash Meta)** - 代理核心
-- **system_tray** - 系统托盘
-- **window_manager** - 窗口管理
+```powershell
+flutter analyze
+flutter test
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass `
+  -File .\tool\package_windows.ps1
+```
+
+发布前建议人工验证：
+
+- 订阅添加、刷新、删除
+- 系统代理连接/断开后恢复
+- TUN 模式管理员启动
+- 托盘隐藏、显示、退出
+- 程序目录不可写时的数据回退
+
+## 常见问题
+
+- 浏览器仍无法联网：确认当前模式是否为系统代理，并检查 Windows 代理设置是否被其他软件覆盖。
+- 退出后代理未恢复：重新打开 SSRVPN，应用会尝试恢复上次异常退出留下的代理快照。
+- TUN 模式启动失败：以管理员身份运行，并确认系统允许虚拟网卡/驱动。
+- 打包失败：确认 Visual Studio C++ 桌面工作负载和 Flutter Windows 桌面支持已安装。
 
 ## License
 
-MIT License
+本项目为私有/个人项目时请按仓库实际授权使用；如果公开分发，建议补充明确的开源许可证。
