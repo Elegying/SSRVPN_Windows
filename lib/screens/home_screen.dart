@@ -412,6 +412,233 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _showForceProxySitesDialog() async {
+    final settings = context.read<SettingsService>().settings;
+    final savedSites = AppSettings.normalizeForceProxySites(
+      settings.forceProxySites,
+    );
+    final controllers = List.generate(
+      AppSettings.forceProxySiteLimit,
+      (index) => TextEditingController(text: savedSites[index]),
+    );
+    String? errorText;
+
+    final sites = await showDialog<List<String>>(
+      context: context,
+      builder: (dialogContext) {
+        final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
+        final titleColor =
+            isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
+        final subtitleColor =
+            isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
+
+        return StatefulBuilder(
+          builder: (builderContext, setDialogState) {
+            void submit() {
+              final values = controllers
+                  .map((controller) => controller.text.trim())
+                  .toList();
+              for (var i = 0; i < values.length; i++) {
+                final message = _validateForceProxySite(values[i]);
+                if (message != null) {
+                  setDialogState(() => errorText = '第 ${i + 1} 个输入框：$message');
+                  return;
+                }
+              }
+              Navigator.of(dialogContext).pop(values);
+            }
+
+            return Dialog(
+              backgroundColor: isDark ? const Color(0xFF1A1D26) : Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.of(dialogContext).viewInsets.bottom,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    AppTheme.primaryColor,
+                                    AppTheme.accentColor,
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.add_link_rounded,
+                                color: Colors.white,
+                                size: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                '添加强制代理网站',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: titleColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          '默认规则已涵盖绝大部分网站，如出现个别网站无法访问的情况，再使用此功能，粘贴需要强制代理的网址：',
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.45,
+                            color: subtitleColor,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        for (var i = 0;
+                            i < AppSettings.forceProxySiteLimit;
+                            i++) ...[
+                          TextField(
+                            controller: controllers[i],
+                            maxLines: 1,
+                            keyboardType: TextInputType.url,
+                            textInputAction:
+                                i == AppSettings.forceProxySiteLimit - 1
+                                    ? TextInputAction.done
+                                    : TextInputAction.next,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.deny(
+                                RegExp(r'[\r\n]'),
+                              ),
+                            ],
+                            decoration: GlassInputDecoration(
+                              isDark: isDark,
+                              labelText: '网址 ${i + 1}',
+                              hintText: 'https://example.com',
+                              prefixIcon: const Icon(Icons.language, size: 18),
+                            ),
+                            onSubmitted: (_) {
+                              if (i == AppSettings.forceProxySiteLimit - 1) {
+                                submit();
+                              }
+                            },
+                          ),
+                          if (i != AppSettings.forceProxySiteLimit - 1)
+                            const SizedBox(height: 10),
+                        ],
+                        if (errorText != null) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            errorText!,
+                            style: const TextStyle(
+                              color: AppTheme.errorColor,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextButton(
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(),
+                                child: const Text('取消'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: submit,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primaryColor,
+                                  foregroundColor: Colors.white,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                child: const Text('确定'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    for (final controller in controllers) {
+      controller.dispose();
+    }
+    if (sites == null || !mounted || _disposed) return;
+    await _applyForceProxySites(sites);
+  }
+
+  String? _validateForceProxySite(String value) {
+    if (value.trim().isEmpty) return null;
+    if (RegExp(r'[\s,，;；]').hasMatch(value.trim())) {
+      return '一个输入框只能填写一个网址';
+    }
+    if (AppSettings.extractForceProxyHost(value) == null) {
+      return '请输入有效的网址或域名';
+    }
+    return null;
+  }
+
+  Future<void> _applyForceProxySites(List<String> sites) async {
+    final settingsService = context.read<SettingsService>();
+    final clashService = context.read<ClashService>();
+    await settingsService.updateForceProxySites(sites);
+    clashService.updateSettings(settingsService.settings);
+
+    final shouldReload = _isConnected && !_isConnecting;
+    var reloadSucceeded = false;
+    if (shouldReload) {
+      await _reloadConfig();
+      reloadSucceeded = mounted &&
+          !_disposed &&
+          _isConnected &&
+          context.read<ClashService>().isRunning;
+    }
+    if (!mounted || _disposed) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          shouldReload
+              ? reloadSucceeded
+                  ? '强制代理网站已实时生效'
+                  : '强制代理网站已保存，当前连接重载失败，请重新连接'
+              : '强制代理网站已保存',
+        ),
+        backgroundColor:
+            shouldReload && !reloadSucceeded ? AppTheme.warningColor : null,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   Future<void> _handleConnectToggle() async {
     if (_isConnecting) return;
     final clashService = context.read<ClashService>();
@@ -942,11 +1169,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   isConnecting: _isConnecting,
                   onTap: _handleConnectToggle,
                 ),
-                const SizedBox(width: 24),
+                const SizedBox(width: 18),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      _ForceProxyButton(
+                        onTap: _showForceProxySitesDialog,
+                        enabled: !_isConnecting,
+                      ),
+                      const SizedBox(height: 12),
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
                         child: Text(
@@ -967,6 +1199,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ? AppTheme.successColor
                                 : textColor,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -1354,6 +1588,62 @@ class _HomeScreenState extends State<HomeScreen> {
           isDark: isDark,
         );
       },
+    );
+  }
+}
+
+class _ForceProxyButton extends StatelessWidget {
+  final VoidCallback onTap;
+  final bool enabled;
+
+  const _ForceProxyButton({
+    required this.onTap,
+    required this.enabled,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Opacity(
+      opacity: enabled ? 1 : 0.55,
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 168),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppTheme.primaryColor.withAlpha(isDark ? 24 : 16),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: AppTheme.primaryColor.withAlpha(isDark ? 70 : 55),
+            ),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.add_link_rounded,
+                size: 16,
+                color: AppTheme.primaryColor,
+              ),
+              SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  '添加强制代理网站',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.2,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

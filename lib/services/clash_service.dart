@@ -154,18 +154,47 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
   }
 ''';
     try {
-      final result = await Process.run('powershell', [
+      final result = await _runPowerShell(
+        script,
+        timeout: const Duration(seconds: 8),
+      );
+      if (result.exitCode == 0 && result.stdout.toString().trim().isNotEmpty) {
+        _log('已清理遗留的 Mihomo 进程');
+      }
+    } catch (e) {
+      _log('清理遗留核心失败: $e');
+    }
+  }
+
+  Future<ProcessResult> _runPowerShell(
+    String script, {
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    Process? process;
+    try {
+      process = await Process.start('powershell', [
         '-NoLogo',
         '-NoProfile',
         '-NonInteractive',
         '-Command',
         script,
       ]);
-      if (result.exitCode == 0 && result.stdout.toString().trim().isNotEmpty) {
-        _log('已清理遗留的 Mihomo 进程');
-      }
-    } catch (e) {
-      _log('清理遗留核心失败: $e');
+      final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+      final stderrFuture = process.stderr.transform(utf8.decoder).join();
+      final exitCode = await process.exitCode.timeout(
+        timeout,
+        onTimeout: () {
+          process?.kill(ProcessSignal.sigkill);
+          return 124;
+        },
+      );
+
+      final stdout = await stdoutFuture;
+      final stderr = exitCode == 124 ? '电脑性能不足，请重新连接' : await stderrFuture;
+      return ProcessResult(process.pid, exitCode, stdout, stderr);
+    } catch (_) {
+      process?.kill(ProcessSignal.sigkill);
+      rethrow;
     }
   }
 
@@ -271,6 +300,25 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
 
   /// YAML 单引号字符串转义
   String _quote(String name) => "'${name.replaceAll("'", "''")}'";
+
+  List<String> _buildForceProxyRules(AppSettings settings) {
+    final hosts = <String>{};
+    final rules = <String>[];
+    for (final site in settings.forceProxySites) {
+      final host = AppSettings.extractForceProxyHost(site);
+      if (host == null || !hosts.add(host)) continue;
+
+      final address = InternetAddress.tryParse(host);
+      if (address == null) {
+        rules.add('DOMAIN-SUFFIX,$host,PROXY');
+      } else if (address.type == InternetAddressType.IPv6) {
+        rules.add('IP-CIDR6,$host/128,PROXY,no-resolve');
+      } else {
+        rules.add('IP-CIDR,$host/32,PROXY,no-resolve');
+      }
+    }
+    return rules;
+  }
 
   /// Resolves transient port conflicts without changing the user's saved
   /// preferences. The returned settings must be used to generate the config.
@@ -471,6 +519,9 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
     // Rules
     result.writeln();
     result.writeln('rules:');
+    for (final rule in _buildForceProxyRules(settings)) {
+      result.writeln('  - ${_quote(rule)}');
+    }
     result.writeln("  - 'DOMAIN-SUFFIX,cn,DIRECT'");
     if (mmdbExists) {
       result.writeln("  - 'GEOIP,CN,DIRECT'");
@@ -485,7 +536,7 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
   Future<void> writeConfig(String configContent) async {
     final file = File(_configPath);
     final temp = File('$_configPath.tmp');
-    await temp.writeAsString(configContent, flush: true);
+    await temp.writeAsString(configContent);
     await temp.rename(file.path);
   }
 
@@ -518,6 +569,7 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
     }
 
     try {
+      final startupWatch = Stopwatch()..start();
       _log('🚀 启动 Mihomo...');
 
       // 检查核心文件
@@ -557,6 +609,7 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
       }
 
       // 启动 mihomo 子进程（所有数据都在便携目录内）
+      final processStartWatch = Stopwatch()..start();
       final startedProcess = await Process.start(
         _corePath,
         ['-d', _configDir, '-f', _configPath],
@@ -564,6 +617,7 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
         includeParentEnvironment: true,
         environment: environment,
       );
+      _log('Mihomo 进程已创建，耗时 ${processStartWatch.elapsedMilliseconds}ms');
       _coreProcess = startedProcess;
       int? startupExitCode;
       final startupOutput = <String>[];
@@ -614,16 +668,17 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
 
       if (healthy) {
         _isRunning = true;
-        _log('✅ Mihomo 启动成功');
+        _log('✅ Mihomo API 就绪，耗时 ${startupWatch.elapsedMilliseconds}ms');
 
         // 设置系统代理（非 TUN 模式时）
         if (!_settings.enableTun) {
+          final proxyWatch = Stopwatch()..start();
           final proxySet = await _proxyService.setSystemProxy(
             '127.0.0.1',
             _settings.proxyPort,
           );
           if (proxySet) {
-            _log('✅ 系统代理已设置');
+            _log('✅ 系统代理已设置，耗时 ${proxyWatch.elapsedMilliseconds}ms');
           } else {
             _lastStartError = _proxyService.lastError ?? 'Windows 系统代理设置失败';
             _log('❌ $_lastStartError，连接已取消');
@@ -641,10 +696,11 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
           _lastStartError = 'Mihomo 提前退出（退出码 $startupExitCode）$detail';
           _log('❌ 核心启动失败: $_lastStartError');
         } else {
-          _lastStartError = _lastHealthCheckError ?? 'Mihomo API 未在 15 秒内就绪';
+          final detail = _lastHealthCheckError ?? 'Mihomo API 未在 15 秒内就绪';
+          _lastStartError = '电脑性能不足，请重新连接';
           _log(
             '❌ 核心启动后健康检查失败: '
-            '$_lastStartError',
+            '$detail',
           );
         }
         await _stopInternal();
@@ -667,13 +723,10 @@ $principal = [Security.Principal.WindowsPrincipal]::new($identity)
 $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 ''';
     try {
-      final result = await Process.run('powershell', [
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
+      final result = await _runPowerShell(
         script,
-      ]).timeout(const Duration(seconds: 5));
+        timeout: const Duration(seconds: 5),
+      );
       if (result.exitCode != 0) return null;
       final output = result.stdout.toString().trim().toLowerCase();
       if (output == 'true') return true;
@@ -802,22 +855,38 @@ $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
   Future<bool> _validateConfig(Map<String, String> environment) async {
     _log('正在校验 Mihomo 配置...');
+    final watch = Stopwatch()..start();
+    Process? process;
     try {
-      final result = await Process.run(
+      process = await Process.start(
         _corePath,
         ['-t', '-d', _configDir, '-f', _configPath],
         includeParentEnvironment: true,
         environment: environment,
       );
-      final stdout = result.stdout.toString().trim();
-      final stderr = result.stderr.toString().trim();
+      final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+      final stderrFuture = process.stderr.transform(utf8.decoder).join();
+      final exitCode = await process.exitCode.timeout(
+        const Duration(seconds: 40),
+        onTimeout: () {
+          process?.kill(ProcessSignal.sigkill);
+          return -1;
+        },
+      );
+      final stdout = (await stdoutFuture).trim();
+      final stderr = (await stderrFuture).trim();
       if (stdout.isNotEmpty) _log('[配置校验] $stdout');
       if (stderr.isNotEmpty) _log('[配置校验 stderr] $stderr');
-      if (result.exitCode == 0) {
-        _log('✅ Mihomo 配置校验通过');
+      if (exitCode == 0) {
+        _log('✅ Mihomo 配置校验通过，耗时 ${watch.elapsedMilliseconds}ms');
         return true;
       }
-      final reason = _describeWindowsExitCode(result.exitCode);
+      if (exitCode == -1) {
+        _lastStartError = '电脑性能不足，请重新连接';
+        _log('❌ $_lastStartError');
+        return false;
+      }
+      final reason = _describeWindowsExitCode(exitCode);
       final detail = stderr.isNotEmpty ? stderr : stdout;
       if (reason != null) {
         _lastStartError = 'Mihomo 无法在此电脑运行: $reason';
@@ -825,11 +894,12 @@ $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
         _lastStartError = 'Mihomo 配置校验失败: $detail';
       }
       _log(
-        '❌ Mihomo 配置校验失败，退出码: ${result.exitCode}'
+        '❌ Mihomo 配置校验失败，退出码: $exitCode'
         '${reason == null ? "" : "（$reason）"}',
       );
       return false;
     } catch (e) {
+      process?.kill(ProcessSignal.sigkill);
       _log('❌ 无法执行 Mihomo 配置校验: $e');
       return false;
     }

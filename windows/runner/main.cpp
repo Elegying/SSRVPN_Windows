@@ -17,6 +17,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
           ::FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", L"ssrvpn_windows");
     }
     if (existing_window != nullptr) {
+      ::ShowWindow(existing_window, SW_SHOW);
       ::ShowWindow(existing_window, SW_RESTORE);
       ::SetForegroundWindow(existing_window);
     }

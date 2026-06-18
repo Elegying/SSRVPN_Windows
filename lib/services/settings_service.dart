@@ -182,6 +182,11 @@ class SettingsService extends ChangeNotifier {
     await save();
   }
 
+  Future<void> updateForceProxySites(List<String> sites) async {
+    _settings.forceProxySites = AppSettings.normalizeForceProxySites(sites);
+    await save();
+  }
+
   Future<void> updateMinimizeToTray(bool minimize) async {
     _settings.minimizeToTray = minimize;
     await save();

@@ -203,22 +203,42 @@ ${_notifyWinInetScript()}
     if (await backupFile.exists()) await backupFile.delete();
   }
 
-  Future<ProcessResult> _runPowerShell(String script) {
-    return Process.run(
-      'powershell',
-      [
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-Command',
-        script,
-      ],
-    );
+  Future<ProcessResult> _runPowerShell(String script) async {
+    Process? process;
+    try {
+      process = await Process.start(
+        'powershell',
+        [
+          '-NoLogo',
+          '-NoProfile',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-Command',
+          script,
+        ],
+      );
+      final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+      final stderrFuture = process.stderr.transform(utf8.decoder).join();
+      final exitCode = await process.exitCode.timeout(
+        const Duration(seconds: 20),
+        onTimeout: () {
+          process?.kill(ProcessSignal.sigkill);
+          return 124;
+        },
+      );
+
+      final stdout = await stdoutFuture;
+      final stderr = exitCode == 124 ? '电脑性能不足，请重新连接' : await stderrFuture;
+      return ProcessResult(process.pid, exitCode, stdout, stderr);
+    } catch (e) {
+      process?.kill(ProcessSignal.sigkill);
+      rethrow;
+    }
   }
 
   String _formatPowerShellError(String prefix, ProcessResult result) {
+    if (result.exitCode == 124) return '电脑性能不足，请重新连接';
     final stderr = result.stderr.toString().trim();
     final stdout = result.stdout.toString().trim();
     final detail = stderr.isNotEmpty ? stderr : stdout;

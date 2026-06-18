@@ -1,4 +1,4 @@
-SSRVPN Windows 便携版 1.0.4
+SSRVPN Windows 便携版 2.0.0
 
 使用方法
 1. 请先完整解压 ZIP，不要直接在压缩包预览窗口中运行。

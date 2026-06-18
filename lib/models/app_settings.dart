@@ -1,5 +1,9 @@
+import 'dart:io';
+
 /// 应用设置模型
 class AppSettings {
+  static const int forceProxySiteLimit = 5;
+
   // 代理端口
   int proxyPort; // mixed-port, 默认7890
   int socksPort; // 默认7891
@@ -24,6 +28,7 @@ class AppSettings {
   String latencyTestUrl;
   String? lastSelectedNodeName;
   int latencyTestTimeout; // 毫秒
+  List<String> forceProxySites;
 
   AppSettings({
     this.proxyPort = 7890,
@@ -39,7 +44,8 @@ class AppSettings {
     this.latencyTestUrl = 'http://www.gstatic.com/generate_204',
     this.lastSelectedNodeName,
     this.latencyTestTimeout = 5000,
-  });
+    Iterable<Object?>? forceProxySites,
+  }) : forceProxySites = normalizeForceProxySites(forceProxySites);
 
   AppSettings copyWith({
     int? proxyPort,
@@ -55,6 +61,7 @@ class AppSettings {
     String? latencyTestUrl,
     String? lastSelectedNodeName,
     int? latencyTestTimeout,
+    Iterable<Object?>? forceProxySites,
   }) {
     return AppSettings(
       proxyPort: proxyPort ?? this.proxyPort,
@@ -70,6 +77,7 @@ class AppSettings {
       latencyTestUrl: latencyTestUrl ?? this.latencyTestUrl,
       lastSelectedNodeName: lastSelectedNodeName ?? this.lastSelectedNodeName,
       latencyTestTimeout: latencyTestTimeout ?? this.latencyTestTimeout,
+      forceProxySites: forceProxySites ?? this.forceProxySites,
     );
   }
 
@@ -87,6 +95,7 @@ class AppSettings {
         'latencyTestUrl': latencyTestUrl,
         'lastSelectedNodeName': lastSelectedNodeName,
         'latencyTestTimeout': latencyTestTimeout,
+        'forceProxySites': forceProxySites,
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
@@ -104,7 +113,49 @@ class AppSettings {
         latencyTestUrl: json['latencyTestUrl'] as String? ??
             'http://www.gstatic.com/generate_204',
         latencyTestTimeout: _parseTimeout(json['latencyTestTimeout'], 5000),
+        forceProxySites: json['forceProxySites'] is Iterable
+            ? json['forceProxySites'] as Iterable
+            : null,
       );
+
+  static List<String> normalizeForceProxySites(Iterable<Object?>? sites) {
+    final values =
+        sites?.map((site) => site?.toString().trim() ?? '').toList() ??
+            const <String>[];
+    return List<String>.generate(
+      forceProxySiteLimit,
+      (index) => index < values.length ? values[index] : '',
+      growable: false,
+    );
+  }
+
+  static String? extractForceProxyHost(String site) {
+    var value = site.trim();
+    if (value.isEmpty || RegExp(r'[\s,，;；]').hasMatch(value)) return null;
+    if (value.startsWith('*.')) value = value.substring(2);
+
+    final hasScheme = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://').hasMatch(value);
+    final uri = Uri.tryParse(hasScheme ? value : 'https://$value');
+    var host = uri?.host.trim().toLowerCase();
+    if (host == null || host.isEmpty) return null;
+    if (host.startsWith('*.')) host = host.substring(2);
+    if (host.endsWith('.')) host = host.substring(0, host.length - 1);
+    if (host.isEmpty || host.contains('..') || !_isValidForceProxyHost(host)) {
+      return null;
+    }
+    return host;
+  }
+
+  static bool _isValidForceProxyHost(String host) {
+    if (InternetAddress.tryParse(host) != null) return true;
+    if (host.contains(':')) return false;
+    if (RegExp(r'^\d+(?:\.\d+){3}$').hasMatch(host)) return false;
+
+    final labels = host.split('.');
+    if (labels.length < 2) return false;
+    final labelPattern = RegExp(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$');
+    return labels.every(labelPattern.hasMatch);
+  }
 
   static int _parsePort(Object? value, int fallback) {
     final port = int.tryParse(value?.toString() ?? '');

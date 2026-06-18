@@ -299,7 +299,7 @@ class _NodeEditScreenState extends State<NodeEditScreen> {
                   },
                 ),
                 DropdownButtonFormField<String>(
-                  initialValue: _type,
+                  value: _type,
                   decoration: const InputDecoration(labelText: '节点类型'),
                   items: [
                     for (final type in _availableTypes)
