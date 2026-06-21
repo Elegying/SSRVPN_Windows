@@ -50,7 +50,7 @@ class ClashService {
   static HttpClient _createDirectHttpClient() {
     final client = HttpClient();
     client.findProxy = (_) => 'DIRECT';
-    client.connectionTimeout = const Duration(seconds: 3);
+    client.connectionTimeout = const Duration(seconds: 2);
     return client;
   }
 
