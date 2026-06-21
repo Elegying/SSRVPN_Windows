@@ -32,24 +32,30 @@ class GlassContainer extends StatefulWidget {
 
 class _GlassContainerState extends State<GlassContainer>
     with SingleTickerProviderStateMixin {
-  late AnimationController _pressCtrl;
-  late Animation<double> _scaleAnim;
+  AnimationController? _pressCtrl;
+  Animation<double>? _scaleAnim;
 
   @override
   void initState() {
     super.initState();
-    _pressCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 150),
-    );
-    _scaleAnim = Tween<double>(begin: 1.0, end: 0.97).animate(
-      CurvedAnimation(parent: _pressCtrl, curve: Curves.easeOutCubic),
-    );
+    _initPressAnimation();
+  }
+
+  void _initPressAnimation() {
+    if (widget.enablePress) {
+      _pressCtrl = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 150),
+      );
+      _scaleAnim = Tween<double>(begin: 1.0, end: 0.97).animate(
+        CurvedAnimation(parent: _pressCtrl!, curve: Curves.easeOutCubic),
+      );
+    }
   }
 
   @override
   void dispose() {
-    _pressCtrl.dispose();
+    _pressCtrl?.dispose();
     super.dispose();
   }
 
@@ -68,49 +74,56 @@ class _GlassContainerState extends State<GlassContainer>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final blurSigma = _adaptiveBlur(context);
 
-    return RepaintBoundary(
-      child: GestureDetector(
-        onTapDown: widget.enablePress ? (_) => _pressCtrl.forward() : null,
-        onTapUp: widget.enablePress ? (_) => _pressCtrl.reverse() : null,
-        onTapCancel: widget.enablePress ? () => _pressCtrl.reverse() : null,
-        child: AnimatedBuilder(
-          animation: _pressCtrl,
-          builder: (context, child) {
-            return Transform.scale(
-              scale: _scaleAnim.value,
-              child: Container(
-                width: widget.width,
-                height: widget.height,
-                margin: widget.margin,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(widget.borderRadius),
-                  boxShadow: widget.enableShadow
-                      ? [
-                          BoxShadow(
-                            color: Colors.black.withAlpha(isDark ? 60 : 30),
-                            blurRadius: 30,
-                            offset: const Offset(0, 10),
-                            spreadRadius: -6,
-                          ),
-                        ]
-                      : null,
+    Widget result = Container(
+      width: widget.width,
+      height: widget.height,
+      margin: widget.margin,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(widget.borderRadius),
+        boxShadow: widget.enableShadow
+            ? [
+                BoxShadow(
+                  color: Colors.black.withAlpha(isDark ? 60 : 30),
+                  blurRadius: 30,
+                  offset: const Offset(0, 10),
+                  spreadRadius: -6,
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(widget.borderRadius),
-                  child: blurSigma > 0
-                      ? BackdropFilter(
-                          filter: ImageFilter.blur(
-                              sigmaX: blurSigma, sigmaY: blurSigma),
-                          child: _buildGlass(isDark),
-                        )
-                      : _buildGlass(isDark),
-                ),
-              ),
-            );
-          },
-        ),
+              ]
+            : null,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(widget.borderRadius),
+        child: blurSigma > 0
+            ? BackdropFilter(
+                filter: ImageFilter.blur(
+                    sigmaX: blurSigma, sigmaY: blurSigma),
+                child: _buildGlass(isDark),
+              )
+            : _buildGlass(isDark),
       ),
     );
+
+    final ctrl = _pressCtrl;
+    final scaleAnim = _scaleAnim;
+    if (ctrl != null && scaleAnim != null) {
+      result = GestureDetector(
+        onTapDown: (_) => ctrl.forward(),
+        onTapUp: (_) => ctrl.reverse(),
+        onTapCancel: () => ctrl.reverse(),
+        child: AnimatedBuilder(
+          animation: ctrl,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: scaleAnim.value,
+              child: child,
+            );
+          },
+          child: result,
+        ),
+      );
+    }
+
+    return RepaintBoundary(child: result);
   }
 
   Widget _buildGlass(bool isDark) {

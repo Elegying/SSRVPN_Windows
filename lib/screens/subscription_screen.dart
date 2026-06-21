@@ -33,7 +33,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
     if (url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+                const SnackBar(
+          behavior: SnackBarBehavior.floating,
           content: Text('请输入订阅链接或SSR链接'),
           backgroundColor: AppTheme.errorColor,
         ),
@@ -210,7 +211,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           backgroundColor: isDark ? const Color(0xFF1A1D26) : Colors.white,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.88),
+            child: Padding(
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -285,6 +288,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               ],
             ),
           ),
+          ),
         );
       },
     );
@@ -296,7 +300,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.transparent,
         contentPadding: EdgeInsets.zero,
-        content: GlassContainer(
+        content: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.88),
+            child: GlassContainer(
           borderRadius: 20,
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -346,6 +352,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             ],
           ),
         ),
+        ),
       ),
     );
 
@@ -370,7 +377,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('订阅已删除，VPN 已断开'),
+        content: Text('订阅已删除，VPN 已断开'),
               backgroundColor: AppTheme.warningColor,
             ),
           );

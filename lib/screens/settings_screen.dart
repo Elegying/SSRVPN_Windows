@@ -24,7 +24,10 @@ class SettingsScreen extends StatelessWidget {
 
     if (wasRunning && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('网络设置已更新，请重新连接')),
+                const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.fromLTRB(16, 0, 16, 16),
+        content: Text('网络设置已更新，请重新连接')),
       );
     }
   }

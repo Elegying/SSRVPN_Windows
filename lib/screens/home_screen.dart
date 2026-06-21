@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -21,7 +22,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with TickerProviderStateMixin {
   List<ProxyNode> _nodes = [];
   bool _isConnected = false;
   bool _isConnecting = false;
@@ -36,10 +38,15 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _hasShownInitialSubscriptionDialog = false;
   ClashService? _clashService;
   Timer? _updateCheckTimer;
+  late AnimationController _glowController;
 
   @override
   void initState() {
     super.initState();
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3000),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadInitialData());
   }
 
@@ -106,6 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _disposed = true;
     _updateCheckTimer?.cancel();
     _clashService?.removeStatusListener(_handleClashStatusChanged);
+    _glowController.dispose();
     super.dispose();
   }
 
@@ -127,7 +135,10 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       });
     }
-    if (clashService.isRunning) setState(() => _isConnected = true);
+    if (clashService.isRunning) {
+      setState(() => _isConnected = true);
+      _glowController.repeat();
+    }
 
     clashService.addStatusListener(_handleClashStatusChanged);
 
@@ -148,6 +159,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!running) {
         _latencies.clear();
         _selectedNode = null;
+        _glowController.stop();
+      } else {
+        _glowController.repeat();
       }
     });
   }
@@ -222,7 +236,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 navigator.pop();
                 messenger.showSnackBar(
-                  SnackBar(
+        SnackBar(
+                    behavior: SnackBarBehavior.floating,
                     content: Text('节点已更新，获取到 ${nodes.length} 个节点'),
                     backgroundColor: AppTheme.successColor,
                   ),
@@ -656,6 +671,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _isConnected = false;
         _isConnecting = false;
         _latencies.clear();
+        _glowController.stop();
       });
     } else {
       setState(() {
@@ -699,6 +715,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _nodes = nodes;
             _selectedNode = autoSelect;
           });
+          _glowController.repeat();
           _autoTestAllNodes();
           _checkUpdateDelayed();
         } else {
@@ -902,7 +919,9 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (ctx) => Dialog(
         backgroundColor: isDark ? const Color(0xFF1A1D26) : Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
+        child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.88),
+            child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -966,6 +985,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -977,7 +997,9 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (ctx) => Dialog(
         backgroundColor: const Color(0xFF0E1018),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
+        child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.88),
+            child: Container(
           width: 600,
           height: 500,
           padding: const EdgeInsets.all(16),
@@ -1002,7 +1024,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           ClipboardData(text: clashService.recentLogs));
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('日志已复制')));
+                            const SnackBar(
+        margin: EdgeInsets.fromLTRB(16, 0, 16, 16),content: Text('日志已复制')));
                       }
                     },
                   ),
@@ -1029,6 +1052,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -1157,7 +1181,29 @@ class _HomeScreenState extends State<HomeScreen> {
       bool isDark, Color textColor, Color subColor, AppSettings settings) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
-      child: GlassContainer(
+      child: AnimatedBuilder(
+        animation: _glowController,
+        builder: (context, child) {
+          final glowIntensity = _isConnected
+              ? 0.25 + 0.15 * math.sin(_glowController.value * 2 * math.pi)
+              : 0.0;
+          final glowColor = AppTheme.successColor.withAlpha(
+            (glowIntensity * 255).toInt(),
+          );
+          return Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: _isConnected
+                  ? [
+                      BoxShadow(
+                        color: glowColor,
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                  : [],
+            ),
+            child: GlassContainer(
         borderRadius: 18,
         padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
         child: Column(
@@ -1280,6 +1326,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
+      );
+    },
+    ),
     );
   }
 

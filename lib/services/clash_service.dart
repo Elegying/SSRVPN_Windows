@@ -449,6 +449,11 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
     result.writeln('    - any:53');
     result.writeln('  auto-route: true');
     result.writeln('  auto-detect-interface: true');
+    result.writeln('  route-exclude-address:');
+    result.writeln('    - 192.168.0.0/16');
+    result.writeln('    - 10.0.0.0/8');
+    result.writeln('    - 172.16.0.0/12');
+    result.writeln('    - 100.64.0.0/10');
 
     // DNS
     result.writeln();
@@ -1002,7 +1007,7 @@ $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
   void _startStatusMonitor() {
     _statusTimer?.cancel();
-    _statusTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+    _statusTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
       if (!_isRunning || _healthCheckInProgress) return;
       _healthCheckInProgress = true;
       try {

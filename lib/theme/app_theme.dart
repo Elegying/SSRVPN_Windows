@@ -301,3 +301,19 @@ class AppTheme {
         ),
       );
 }
+
+/// SnackBar 快捷方法，避免被底部元素遮挡
+extension SnackBarX on BuildContext {
+  void showSnack(String message, {
+    Color? backgroundColor,
+    Duration duration = const Duration(seconds: 2),
+  }) {
+    ScaffoldMessenger.of(this).showSnackBar(SnackBar(
+      behavior: SnackBarBehavior.floating,
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      content: Text(message),
+      backgroundColor: backgroundColor,
+      duration: duration,
+    ));
+  }
+}

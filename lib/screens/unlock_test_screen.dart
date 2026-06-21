@@ -75,7 +75,10 @@ class _UnlockTestScreenState extends State<UnlockTestScreen> {
   bool _ensureConnected(ClashService clashService) {
     if (clashService.isRunning) return true;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('请先连接 VPN 后再进行解锁测试')),
+              const SnackBar(
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.fromLTRB(16, 0, 16, 16),
+        content: Text('请先连接 VPN 后再进行解锁测试')),
     );
     return false;
   }
