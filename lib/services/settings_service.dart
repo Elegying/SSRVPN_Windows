@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -123,13 +124,30 @@ class SettingsService extends ChangeNotifier {
         16, (_) => rand.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
   }
 
+  Completer<void>? _saveLock;
+  Timer? _saveDebounce;
+
   Future<void> save() async {
-    final jsonStr = jsonEncode(_settings.toJson());
-    final file = File(_settingsPath);
-    final temp = File('$_settingsPath.tmp');
-    await temp.writeAsString(jsonStr, flush: true);
-    await temp.rename(file.path);
-    notifyListeners();
+    _saveDebounce?.cancel();
+    final completer = Completer<void>();
+    _saveDebounce = Timer(const Duration(milliseconds: 80), () async {
+      // Wait for any in-flight save to complete
+      while (_saveLock != null) {
+        await _saveLock!.future;
+      }
+      _saveLock = completer;
+      try {
+        final jsonStr = jsonEncode(_settings.toJson());
+        final file = File(_settingsPath);
+        final temp = File('$_settingsPath.tmp');
+        await temp.writeAsString(jsonStr, flush: true);
+        await temp.rename(file.path);
+        notifyListeners();
+      } finally {
+        _saveLock = null;
+        completer.complete();
+      }
+    });
   }
 
   Future<void> updateProxyPort(int port) async {

@@ -22,6 +22,28 @@ class ProxyNode {
     Map<String, dynamic>? extra,
   }) : extra = extra ?? {};
 
+  ProxyNode copyWith({
+    String? name,
+    String? type,
+    String? server,
+    int? port,
+    String? group,
+    int? latency,
+    bool? isOnline,
+    DateTime? lastLatencyTest,
+    Map<String, dynamic>? extra,
+  }) => ProxyNode(
+        name: name ?? this.name,
+        type: type ?? this.type,
+        server: server ?? this.server,
+        port: port ?? this.port,
+        group: group ?? this.group,
+        latency: latency ?? this.latency,
+        isOnline: isOnline ?? this.isOnline,
+        lastLatencyTest: lastLatencyTest ?? this.lastLatencyTest,
+        extra: extra ?? Map<String, dynamic>.from(this.extra),
+      );
+
   Map<String, dynamic> toJson() => {
         'name': name,
         'type': type,

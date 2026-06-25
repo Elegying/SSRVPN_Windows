@@ -10,6 +10,7 @@ import 'screens/home_screen.dart';
 import 'screens/subscription_screen.dart';
 import 'screens/unlock_test_screen.dart';
 import 'theme/app_theme.dart';
+import 'widgets/liquid_glass.dart';
 
 class SSRVpnApp extends StatefulWidget {
   const SSRVpnApp({super.key});
@@ -52,10 +53,17 @@ class _SSRVpnAppState extends State<SSRVpnApp> with WindowListener {
         _settingsService!.settings,
         dataDir: _settingsService!.dataDir,
         storageNotice: _settingsService!.storageNotice,
+      ).timeout(
+        const Duration(seconds: 90),
+        onTimeout: () => throw TimeoutException('核心服务初始化超时（90秒）'),
       );
       _clashService!.addStatusListener(_handleCoreStatusChanged);
       final appDataDir = _clashService!.configDir;
-      _subscriptionService = await SubscriptionService.getInstance(appDataDir);
+      _subscriptionService = await SubscriptionService.getInstance(appDataDir)
+          .timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => throw TimeoutException('订阅服务初始化超时（30秒）'),
+      );
 
       // 初始化系统托盘
       await _initTray();
@@ -329,123 +337,26 @@ class _SSRVpnAppState extends State<SSRVpnApp> with WindowListener {
   }
 
   Widget _buildBottomNav(bool isDark) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0E1018) : Colors.white,
-        border: Border(
-            top: BorderSide(
-                color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
-                width: 0.5)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(isDark ? 80 : 15),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          children: [
-            _BottomNavItem(
-              icon: Icons.home_rounded,
-              activeIcon: Icons.home_rounded,
-              label: '主页',
-              isSelected: _currentIndex == 0,
-              onTap: () => setState(() => _currentIndex = 0),
-              isDark: isDark,
-            ),
-            _BottomNavItem(
-              icon: Icons.rss_feed_rounded,
-              activeIcon: Icons.rss_feed_rounded,
-              label: '订阅',
-              isSelected: _currentIndex == 1,
-              onTap: () => setState(() => _currentIndex = 1),
-              isDark: isDark,
-            ),
-            _BottomNavItem(
-              icon: Icons.fact_check_rounded,
-              activeIcon: Icons.fact_check_rounded,
-              label: '解锁',
-              isSelected: _currentIndex == 2,
-              onTap: () => setState(() => _currentIndex = 2),
-              isDark: isDark,
-            ),
-          ],
+    return LiquidGlassNavBar(
+      currentIndex: _currentIndex,
+      onTap: (index) => setState(() => _currentIndex = index),
+      items: const [
+        NavItem(
+          icon: Icons.home_outlined,
+          activeIcon: Icons.home_rounded,
+          label: '主页',
         ),
-      ),
-    );
-  }
-}
-
-class _BottomNavItem extends StatelessWidget {
-  final IconData icon;
-  final IconData activeIcon;
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-  final bool isDark;
-
-  const _BottomNavItem({
-    required this.icon,
-    required this.activeIcon,
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? AppTheme.primaryColor.withAlpha(isDark ? 25 : 20)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  isSelected ? activeIcon : icon,
-                  size: 24,
-                  color: isSelected
-                      ? AppTheme.primaryColor
-                      : (isDark
-                          ? AppTheme.darkTextSecondary
-                          : AppTheme.lightTextHint),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                  color: isSelected
-                      ? AppTheme.primaryColor
-                      : (isDark
-                          ? AppTheme.darkTextSecondary
-                          : AppTheme.lightTextHint),
-                  decoration: TextDecoration.none,
-                ),
-              ),
-            ],
-          ),
+        NavItem(
+          icon: Icons.rss_feed_outlined,
+          activeIcon: Icons.rss_feed_rounded,
+          label: '订阅',
         ),
-      ),
+        NavItem(
+          icon: Icons.fact_check_outlined,
+          activeIcon: Icons.fact_check_rounded,
+          label: '解锁',
+        ),
+      ],
     );
   }
 }

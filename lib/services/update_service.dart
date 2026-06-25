@@ -21,6 +21,10 @@ class UpdateService {
         'User-Agent': 'SSRVPN-UpdateChecker',
       }).timeout(const Duration(seconds: 10));
 
+      if (response.statusCode == 403) {
+        debugPrint('[更新] GitHub API rate limit，请稍后再试');
+        return null;
+      }
       if (response.statusCode != 200) return null;
 
       final data = json.decode(response.body);

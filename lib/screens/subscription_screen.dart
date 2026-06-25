@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/subscription.dart';
 import '../services/clash_service.dart';
 import '../services/subscription_service.dart';
+import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_container.dart';
 
@@ -33,7 +34,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
     if (url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
+        const SnackBar(
           behavior: SnackBarBehavior.floating,
           content: Text('请输入订阅链接或SSR链接'),
           backgroundColor: AppTheme.errorColor,
@@ -212,82 +213,83 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.88),
+            constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.88),
             child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: AppTheme.warningColor.withAlpha(20),
-                    shape: BoxShape.circle,
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: AppTheme.warningColor.withAlpha(20),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.wifi_off_rounded,
+                        size: 28, color: AppTheme.warningColor),
                   ),
-                  child: const Icon(Icons.wifi_off_rounded,
-                      size: 28, color: AppTheme.warningColor),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  '网络连接异常',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: isDark
-                        ? AppTheme.darkTextPrimary
-                        : AppTheme.lightTextPrimary,
+                  const SizedBox(height: 16),
+                  Text(
+                    '网络连接异常',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: isDark
+                          ? AppTheme.darkTextPrimary
+                          : AppTheme.lightTextPrimary,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '请检查网络连接后重试',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: isDark
-                        ? AppTheme.darkTextSecondary
-                        : AppTheme.lightTextSecondary,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.errorColor.withAlpha(10),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    detail,
+                  const SizedBox(height: 8),
+                  Text(
+                    '请检查网络连接后重试',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.errorColor.withAlpha(180)),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                      backgroundColor:
-                          AppTheme.primaryColor.withAlpha(isDark ? 25 : 15),
+                      fontSize: 13,
+                      color: isDark
+                          ? AppTheme.darkTextSecondary
+                          : AppTheme.lightTextSecondary,
                     ),
-                    child: const Text('知道了',
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.primaryColor)),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.errorColor.withAlpha(10),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      detail,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.errorColor.withAlpha(180)),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        backgroundColor:
+                            AppTheme.primaryColor.withAlpha(isDark ? 25 : 15),
+                      ),
+                      child: const Text('知道了',
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primaryColor)),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
           ),
         );
       },
@@ -301,57 +303,58 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         backgroundColor: Colors.transparent,
         contentPadding: EdgeInsets.zero,
         content: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.88),
-            child: GlassContainer(
-          borderRadius: 20,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.warning_amber_rounded,
-                size: 48,
-                color: AppTheme.warningColor,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                '确认删除',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '删除后将无法恢复',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white.withAlpha(120)
-                      : AppTheme.lightTextSecondary,
+          constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.88),
+          child: GlassContainer(
+            borderRadius: 20,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  size: 48,
+                  color: AppTheme.warningColor,
                 ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('取消'),
-                    ),
+                const SizedBox(height: 16),
+                const Text(
+                  '确认删除',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '删除后将无法恢复',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white.withAlpha(120)
+                        : AppTheme.lightTextSecondary,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.errorColor,
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('取消'),
                       ),
-                      child: const Text('删除'),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.errorColor,
+                        ),
+                        child: const Text('删除'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
         ),
       ),
     );
@@ -377,7 +380,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-        content: Text('订阅已删除，VPN 已断开'),
+              content: Text('订阅已删除，VPN 已断开'),
               backgroundColor: AppTheme.warningColor,
             ),
           );
@@ -395,64 +398,216 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(isDark),
-              const SizedBox(height: 24),
-              _buildAddCard(isDark),
-              const SizedBox(height: 28),
-              if (subscriptions.isNotEmpty)
-                _buildSubscriptionList(subService, subscriptions, isDark),
-              if (subscriptions.isEmpty) _buildEmptyState(isDark),
-            ],
-          ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final horizontalPadding = constraints.maxWidth < 420 ? 16.0 : 24.0;
+            return SingleChildScrollView(
+              padding: EdgeInsets.symmetric(
+                horizontal: horizontalPadding,
+                vertical: 16,
+              ),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 920),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(isDark),
+                      const SizedBox(height: 24),
+                      _buildAddCard(isDark),
+                      const SizedBox(height: 28),
+                      if (subscriptions.isNotEmpty)
+                        _buildSubscriptionList(
+                          subService,
+                          subscriptions,
+                          isDark,
+                        ),
+                      if (subscriptions.isEmpty) _buildEmptyState(isDark),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
   }
 
   Widget _buildHeader(bool isDark) {
-    return Row(
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppTheme.primaryColor, AppTheme.accentColor],
-            ),
-            borderRadius: BorderRadius.circular(12),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 420;
+        final titleBlock = Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '订阅管理',
+                style: TextStyle(
+                  fontSize: compact ? 22 : 24,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : AppTheme.lightTextPrimary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '支持订阅链接与 ssr:// 导入',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: compact ? 12 : 13,
+                  color: isDark
+                      ? Colors.white.withAlpha(100)
+                      : AppTheme.lightTextSecondary,
+                ),
+              ),
+            ],
           ),
-          child: const Icon(Icons.rss_feed, color: Colors.white, size: 22),
-        ),
-        const SizedBox(width: 16),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        );
+
+        return Row(
           children: [
-            Text(
-              '订阅管理',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : AppTheme.lightTextPrimary,
+            Container(
+              width: compact ? 40 : 44,
+              height: compact ? 40 : 44,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppTheme.primaryColor, AppTheme.accentColor],
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                Icons.rss_feed,
+                color: Colors.white,
+                size: compact ? 20 : 22,
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              '支持订阅链接与 ssr:// 导入',
-              style: TextStyle(
-                fontSize: 13,
-                color: isDark
-                    ? Colors.white.withAlpha(100)
-                    : AppTheme.lightTextSecondary,
-              ),
-            ),
+            SizedBox(width: compact ? 12 : 16),
+            titleBlock,
+            const SizedBox(width: 12),
+            _AboutButton(onTap: () => _showAboutDialog(context)),
           ],
+        );
+      },
+    );
+  }
+
+  void _showAboutDialog(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: GlassContainer(
+          borderRadius: 16,
+          enablePress: false,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: (MediaQuery.of(ctx).size.width * 0.88)
+                  .clamp(
+                    280.0,
+                    420.0,
+                  )
+                  .toDouble(),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [AppTheme.primaryColor, AppTheme.accentColor],
+                      ),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.vpn_lock_rounded,
+                      size: 28,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'SSRVPN',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: isDark
+                          ? AppTheme.darkTextPrimary
+                          : AppTheme.lightTextPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'v${UpdateService.appVersion}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.primaryColor,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _AboutInfoPanel(
+                    title: '项目地址',
+                    body: 'https://github.com/Elegying/SSRVPN_Windows',
+                    isDark: isDark,
+                    accent: true,
+                  ),
+                  const SizedBox(height: 12),
+                  _AboutInfoPanel(
+                    title: '免责声明',
+                    body:
+                        '本软件仅供学习与研究使用，请遵守当地法律法规。\n使用者应对自身行为承担全部责任，开发者不对因使用本软件产生的任何后果负责。',
+                    isDark: isDark,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'By--两颗西柚',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark
+                          ? AppTheme.darkTextSecondary
+                          : AppTheme.lightTextSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        backgroundColor: AppTheme.primaryColor.withAlpha(
+                          isDark ? 25 : 15,
+                        ),
+                      ),
+                      child: const Text(
+                        '知道了',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
-      ],
+      ),
     );
   }
 
@@ -805,5 +960,102 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     if (diff.inHours < 24) return '${diff.inHours}小时前';
     if (diff.inDays < 7) return '${diff.inDays}天前';
     return '${date.month}/${date.day} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _AboutButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _AboutButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: '关于',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: AppTheme.primaryColor.withAlpha(20),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppTheme.primaryColor.withAlpha(55)),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                size: 16,
+                color: AppTheme.primaryColor,
+              ),
+              SizedBox(width: 6),
+              Text(
+                '关于',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AboutInfoPanel extends StatelessWidget {
+  final String title;
+  final String body;
+  final bool isDark;
+  final bool accent;
+
+  const _AboutInfoPanel({
+    required this.title,
+    required this.body,
+    required this.isDark,
+    this.accent = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withAlpha(5) : Colors.black.withAlpha(5),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color:
+                  isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            body,
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.5,
+              color: accent
+                  ? AppTheme.accentColor
+                  : (isDark
+                      ? AppTheme.darkTextSecondary
+                      : AppTheme.lightTextSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

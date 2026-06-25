@@ -19,6 +19,7 @@ class NodeEditScreen extends StatefulWidget {
 }
 
 class _NodeEditScreenState extends State<NodeEditScreen> {
+  late ProxyNode _editNode;
   static const _standardTypes = [
     'ss',
     'ssr',
@@ -74,6 +75,7 @@ class _NodeEditScreenState extends State<NodeEditScreen> {
   @override
   void initState() {
     super.initState();
+    _editNode = widget.node;
     final config = _originalConfig;
     _type = (config['type']?.toString() ?? widget.node.type).toLowerCase();
     _nameController = _controller(config['name'] ?? widget.node.name);
@@ -197,7 +199,7 @@ class _NodeEditScreenState extends State<NodeEditScreen> {
 
     final subscriptionService = context.read<SubscriptionService>();
     setState(() => _saving = true);
-    final originalName = widget.node.name;
+    final originalName = _editNode.name;
     final updatedName = _nameController.text.trim();
     final settingsService = context.read<SettingsService>();
     final renameRememberedNode = originalName != updatedName &&
@@ -239,10 +241,9 @@ class _NodeEditScreenState extends State<NodeEditScreen> {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-                    behavior: SnackBarBehavior.floating,
-                    margin: EdgeInsets.fromLTRB(16, 0, 16, 16),
-        
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         content: Text('保存失败：$message'),
         backgroundColor: AppTheme.errorColor,
       ),

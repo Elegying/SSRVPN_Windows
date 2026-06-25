@@ -6,7 +6,7 @@ import 'package:window_manager/window_manager.dart';
 import 'app.dart';
 
 const Size _preferredWindowSize = Size(480, 780);
-const Size _preferredMinimumSize = Size(420, 680);
+const Size _preferredMinimumSize = Size(360, 620);
 const double _windowHorizontalMargin = 24;
 const double _windowVerticalMargin = 32;
 

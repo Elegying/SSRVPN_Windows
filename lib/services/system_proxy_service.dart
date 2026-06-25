@@ -36,6 +36,17 @@ class SystemProxyService {
     try {
       final data =
           jsonDecode(await backupFile.readAsString()) as Map<String, dynamic>;
+      // Staleness check: ignore backups older than 24 hours (likely from a
+      // different session or a forgotten backup from a long-ago crash).
+      final savedAt = data['_savedAt'] as int?;
+      if (savedAt != null) {
+        final age = DateTime.now().millisecondsSinceEpoch - savedAt;
+        if (age > 24 * 60 * 60 * 1000) {
+          await backupFile.delete();
+          _recoveryPending = false;
+          return;
+        }
+      }
       final snapshot = _ProxySnapshot.fromJson(data);
       if (await _restoreSnapshot(snapshot)) {
         await backupFile.delete();
@@ -191,8 +202,11 @@ ${_notifyWinInetScript()}
     }
     final file = File(statePath);
     await file.parent.create(recursive: true);
+    final json = snapshot.toJson();
+    json['_savedAt'] = DateTime.now().millisecondsSinceEpoch;
+    json['_pid'] = pid;
     final temp = File('$statePath.tmp');
-    await temp.writeAsString(jsonEncode(snapshot.toJson()), flush: true);
+    await temp.writeAsString(jsonEncode(json), flush: true);
     await temp.rename(statePath);
   }
 
@@ -207,7 +221,7 @@ ${_notifyWinInetScript()}
     Process? process;
     try {
       process = await Process.start(
-        'powershell',
+        _powerShellExecutable(),
         [
           '-NoLogo',
           '-NoProfile',
@@ -235,6 +249,22 @@ ${_notifyWinInetScript()}
       process?.kill(ProcessSignal.sigkill);
       rethrow;
     }
+  }
+
+  String _powerShellExecutable() {
+    if (!Platform.isWindows) return 'powershell';
+    final windowsDir =
+        Platform.environment['SystemRoot'] ?? Platform.environment['WINDIR'];
+    if (windowsDir != null && windowsDir.trim().isNotEmpty) {
+      final executable = File(
+        '$windowsDir${Platform.pathSeparator}System32'
+        '${Platform.pathSeparator}WindowsPowerShell'
+        '${Platform.pathSeparator}v1.0'
+        '${Platform.pathSeparator}powershell.exe',
+      );
+      if (executable.existsSync()) return executable.path;
+    }
+    return 'powershell';
   }
 
   String _formatPowerShellError(String prefix, ProcessResult result) {

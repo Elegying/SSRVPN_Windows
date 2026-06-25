@@ -1,6 +1,9 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 
+const double _bottomNavSurfaceOpacity = 0.02; // 98% transparent.
+const double _bottomNavIndicatorOpacity = 0.02; // 98% transparent.
+
 /// 液态玻璃容器 — 模拟 iOS 26 Liquid Glass 效果
 /// 支持 Android + macOS，纯 Flutter 实现
 class LiquidGlassContainer extends StatelessWidget {
@@ -26,6 +29,7 @@ class LiquidGlassContainer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    double alpha(double value) => value.clamp(0.0, 1.0).toDouble();
 
     return ClipRRect(
       borderRadius: borderRadius,
@@ -42,14 +46,14 @@ class LiquidGlassContainer extends StatelessWidget {
               end: Alignment.bottomRight,
               colors: isDark
                   ? [
-                      Colors.white.withValues(alpha: opacity * 1.2),
-                      Colors.white.withValues(alpha: opacity * 0.4),
-                      Colors.white.withValues(alpha: opacity * 0.8),
+                      Colors.white.withValues(alpha: alpha(opacity * 1.2)),
+                      Colors.white.withValues(alpha: alpha(opacity * 0.4)),
+                      Colors.white.withValues(alpha: alpha(opacity * 0.8)),
                     ]
                   : [
-                      Colors.white.withValues(alpha: opacity * 2.0),
-                      Colors.white.withValues(alpha: opacity * 0.6),
-                      Colors.white.withValues(alpha: opacity * 1.5),
+                      Colors.white.withValues(alpha: alpha(opacity * 2.0)),
+                      Colors.white.withValues(alpha: alpha(opacity * 0.6)),
+                      Colors.white.withValues(alpha: alpha(opacity * 1.5)),
                     ],
               stops: const [0.0, 0.5, 1.0],
             ),
@@ -195,57 +199,68 @@ class LiquidGlassNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return LiquidGlassContainer(
-      blur: 30,
-      opacity: 0.12,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: List.generate(items.length, (index) {
-          final item = items[index];
-          final isActive = index == currentIndex;
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      child: LiquidGlassContainer(
+        blur: 30,
+        opacity: _bottomNavSurfaceOpacity,
+        borderRadius: const BorderRadius.all(Radius.circular(32)),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: List.generate(items.length, (index) {
+            final item = items[index];
+            final isActive = index == currentIndex;
 
-          return GestureDetector(
-            onTap: () => onTap(index),
-            behavior: HitTestBehavior.opaque,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? (isDark
-                        ? Colors.white.withValues(alpha: 0.12)
-                        : Colors.black.withValues(alpha: 0.06))
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isActive ? item.activeIcon : item.icon,
-                    size: 22,
-                    color: isActive
-                        ? Theme.of(context).colorScheme.primary
-                        : (isDark ? Colors.white54 : Colors.black45),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    item.label,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+            return GestureDetector(
+              onTap: () => onTap(index),
+              behavior: HitTestBehavior.opaque,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? (isDark
+                          ? Colors.white.withValues(
+                              alpha: _bottomNavIndicatorOpacity,
+                            )
+                          : Colors.black.withValues(
+                              alpha: _bottomNavIndicatorOpacity,
+                            ))
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(22),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isActive ? item.activeIcon : item.icon,
+                      size: 22,
                       color: isActive
                           ? Theme.of(context).colorScheme.primary
                           : (isDark ? Colors.white54 : Colors.black45),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      item.label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight:
+                            isActive ? FontWeight.w600 : FontWeight.w400,
+                        color: isActive
+                            ? Theme.of(context).colorScheme.primary
+                            : (isDark ? Colors.white54 : Colors.black45),
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          );
-        }),
+            );
+          }),
+        ),
       ),
     );
   }

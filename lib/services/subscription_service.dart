@@ -167,66 +167,67 @@ class SubscriptionService extends ChangeNotifier {
     }
 
     Exception? lastException;
+    final client = HttpClient();
+    try {
+      for (int attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          client.connectionTimeout = Duration(seconds: 15 * attempt);
+          final request = await client.getUrl(uri);
+          request.headers.set('User-Agent', 'SSRVPN/2.0.0');
+          request.headers.set('Accept', 'text/yaml, application/x-yaml, */*');
 
-    for (int attempt = 1; attempt <= maxRetries; attempt++) {
-      final client = HttpClient();
-      try {
-        client.connectionTimeout = Duration(seconds: 15 * attempt);
-        final request = await client.getUrl(uri);
-        request.headers.set('User-Agent', 'SSRVPN/2.0.0');
-        request.headers.set('Accept', 'text/yaml, application/x-yaml, */*');
+          final response =
+              await request.close().timeout(Duration(seconds: 30 * attempt));
 
-        final response =
-            await request.close().timeout(Duration(seconds: 30 * attempt));
+          if (response.statusCode == 200) {
+            if (response.contentLength > _maxSubscriptionBytes) {
+              throw Exception('订阅内容超过 20 MB 限制');
+            }
+            final bodyBytes = await _readLimitedResponse(response);
+            String body = utf8.decode(bodyBytes, allowMalformed: true);
 
-        if (response.statusCode == 200) {
-          if (response.contentLength > _maxSubscriptionBytes) {
-            throw Exception('订阅内容超过 20 MB 限制');
+            if (body.trim().isEmpty) {
+              throw Exception('服务器返回空内容');
+            }
+
+            // 尝试 Base64 解码
+            final compact = body.replaceAll(RegExp(r'\s'), '');
+            if (_isLikelyBase64(compact)) {
+              try {
+                final decoded = utf8.decode(base64Decode(compact));
+                if (decoded.trim().isNotEmpty) {
+                  body = decoded;
+                }
+              } catch (_) {}
+            }
+
+            return body;
+          } else if (response.statusCode == 429) {
+            throw Exception('请求过于频繁 (HTTP 429)');
+          } else if (response.statusCode == 403) {
+            throw Exception('访问被拒绝 (HTTP 403)');
+          } else {
+            throw Exception('HTTP ${response.statusCode}');
           }
-          final bodyBytes = await _readLimitedResponse(response);
-          String body = utf8.decode(bodyBytes, allowMalformed: true);
-
-          if (body.trim().isEmpty) {
-            throw Exception('服务器返回空内容');
-          }
-
-          // 尝试 Base64 解码
-          final compact = body.replaceAll(RegExp(r'\s'), '');
-          if (_isLikelyBase64(compact)) {
-            try {
-              final decoded = utf8.decode(base64Decode(compact));
-              if (decoded.trim().isNotEmpty) {
-                body = decoded;
-              }
-            } catch (_) {}
-          }
-
-          return body;
-        } else if (response.statusCode == 429) {
-          throw Exception('请求过于频繁 (HTTP 429)');
-        } else if (response.statusCode == 403) {
-          throw Exception('访问被拒绝 (HTTP 403)');
-        } else {
-          throw Exception('HTTP ${response.statusCode}');
+        } on SocketException catch (e) {
+          lastException = Exception('网络连接失败: ${e.message}');
+        } on TimeoutException catch (e) {
+          lastException = Exception('连接超时: ${e.duration}');
+        } on HttpException catch (e) {
+          lastException = Exception('HTTP错误: ${e.message}');
+        } catch (e) {
+          lastException = Exception('获取订阅失败: $e');
         }
-      } on SocketException catch (e) {
-        lastException = Exception('网络连接失败: ${e.message}');
-      } on TimeoutException catch (e) {
-        lastException = Exception('连接超时: ${e.duration}');
-      } on HttpException catch (e) {
-        lastException = Exception('HTTP错误: ${e.message}');
-      } catch (e) {
-        lastException = Exception('获取订阅失败: $e');
-      } finally {
-        client.close(force: true);
+
+        if (attempt < maxRetries) {
+          await Future.delayed(Duration(seconds: attempt * 2));
+        }
       }
 
-      if (attempt < maxRetries) {
-        await Future.delayed(Duration(seconds: attempt * 2));
-      }
+      throw lastException ?? Exception('获取订阅失败: 未知错误');
+    } finally {
+      client.close(force: true);
     }
-
-    throw lastException ?? Exception('获取订阅失败: 未知错误');
   }
 
   /// 判断是否为Base64编码
@@ -621,7 +622,8 @@ class SubscriptionService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      // YAML解析失败
+      // YAML解析失败，保留订阅缓存中的原始数据
+      print('[SubscriptionService] YAML解析失败: $e');
     }
   }
 
