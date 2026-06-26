@@ -588,7 +588,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        backgroundColor: AppTheme.primaryColor.withValues(alpha: (isDark ? 25 : 15,) / 255),
+                        backgroundColor: AppTheme.primaryColor.withValues(alpha: (isDark ? 25 : 15) / 255),
                       ),
                       child: const Text(
                         '知道了',
