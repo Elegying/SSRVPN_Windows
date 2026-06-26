@@ -177,8 +177,8 @@ class _ConnectionButtonPainter extends CustomPainter {
       final alpha = ((1.0 - t) * (isConnected ? 50 : 25)).toInt();
 
       final color = isConnected
-          ? AppTheme.successColor.withAlpha(alpha)
-          : AppTheme.primaryColor.withAlpha(alpha);
+          ? AppTheme.successColor.withValues(alpha: (alpha) / 255)
+          : AppTheme.primaryColor.withValues(alpha: (alpha) / 255);
 
       canvas.drawCircle(
         center,
@@ -285,7 +285,7 @@ class _ConnectionButtonPainter extends CustomPainter {
     canvas.drawPath(
       highlightPath,
       Paint()
-        ..color = Colors.white.withAlpha(isDark ? 20 : 40)
+        ..color = Colors.white.withValues(alpha: (isDark ? 20 : 40) / 255)
         ..style = PaintingStyle.stroke
         ..strokeWidth = buttonRadius * 0.15,
     );

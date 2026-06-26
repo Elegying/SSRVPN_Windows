@@ -216,9 +216,9 @@ class _InfoStrip extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withAlpha(isDark ? 16 : 20),
+        color: color.withValues(alpha: (isDark ? 16 : 20) / 255),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withAlpha(isDark ? 42 : 52)),
+        border: Border.all(color: color.withValues(alpha: (isDark ? 42 : 52) / 255)),
       ),
       child: Row(
         children: [
@@ -274,7 +274,7 @@ class _UnlockCard extends StatelessWidget {
         color: isDark ? Colors.white.withValues(alpha: 6 / 255) : Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: statusColor.withAlpha(item.isPending ? 38 : 90),
+          color: statusColor.withValues(alpha: (item.isPending ? 38 : 90) / 255),
           width: item.isPending ? 1 : 1.2,
         ),
         boxShadow: [
@@ -444,7 +444,7 @@ class _Pill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withAlpha(isDark ? 24 : 18),
+        color: color.withValues(alpha: (isDark ? 24 : 18) / 255),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(

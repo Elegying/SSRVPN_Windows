@@ -278,7 +278,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10)),
                         backgroundColor:
-                            AppTheme.primaryColor.withAlpha(isDark ? 25 : 15),
+                            AppTheme.primaryColor.withValues(alpha: (isDark ? 25 : 15) / 255),
                       ),
                       child: const Text('知道了',
                           style: TextStyle(
@@ -588,9 +588,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        backgroundColor: AppTheme.primaryColor.withAlpha(
-                          isDark ? 25 : 15,
-                        ),
+                        backgroundColor: AppTheme.primaryColor.withValues(alpha: (isDark ? 25 : 15,) / 255),
                       ),
                       child: const Text(
                         '知道了',
@@ -744,8 +742,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: isSuccess
-            ? AppTheme.successColor.withAlpha(isDark ? 15 : 20)
-            : AppTheme.errorColor.withAlpha(isDark ? 15 : 20),
+            ? AppTheme.successColor.withValues(alpha: (isDark ? 15 : 20) / 255)
+            : AppTheme.errorColor.withValues(alpha: (isDark ? 15 : 20) / 255),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isSuccess

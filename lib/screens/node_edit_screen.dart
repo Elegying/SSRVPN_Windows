@@ -311,7 +311,7 @@ class _NodeEditScreenState extends State<NodeEditScreen> {
                   },
                 ),
                 DropdownButtonFormField<String>(
-                  value: _type,
+                  initialValue: _type,
                   decoration: const InputDecoration(labelText: '节点类型'),
                   items: [
                     for (final type in _availableTypes)
@@ -438,7 +438,7 @@ class _NodeEditScreenState extends State<NodeEditScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.warningColor.withAlpha(isDark ? 22 : 16),
+        color: AppTheme.warningColor.withValues(alpha: (isDark ? 22 : 16) / 255),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.warningColor.withValues(alpha: 70 / 255)),
       ),

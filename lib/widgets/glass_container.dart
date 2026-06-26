@@ -83,7 +83,7 @@ class _GlassContainerState extends State<GlassContainer>
         boxShadow: widget.enableShadow
             ? [
                 BoxShadow(
-                  color: Colors.black.withAlpha(isDark ? 60 : 30),
+                  color: Colors.black.withValues(alpha: (isDark ? 60 : 30) / 255),
                   blurRadius: 30,
                   offset: const Offset(0, 10),
                   spreadRadius: -6,
@@ -174,13 +174,13 @@ class GlassInputDecoration extends InputDecoration {
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(
-              color: Colors.white.withAlpha(isDark ? 15 : 30),
+              color: Colors.white.withValues(alpha: (isDark ? 15 : 30) / 255),
             ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(
-              color: Colors.white.withAlpha(isDark ? 15 : 30),
+              color: Colors.white.withValues(alpha: (isDark ? 15 : 30) / 255),
             ),
           ),
           focusedBorder: OutlineInputBorder(

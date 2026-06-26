@@ -978,7 +978,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                       backgroundColor:
-                          AppTheme.primaryColor.withAlpha(isDark ? 25 : 15),
+                          AppTheme.primaryColor.withValues(alpha: (isDark ? 25 : 15) / 255),
                     ),
                     child: const Text('知道了',
                         style: TextStyle(
@@ -1465,7 +1465,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   color: selected
-                      ? AppTheme.primaryColor.withAlpha(isDark ? 28 : 18)
+                      ? AppTheme.primaryColor.withValues(alpha: (isDark ? 28 : 18) / 255)
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
@@ -1711,10 +1711,10 @@ class _ForceProxyButton extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 168),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withAlpha(isDark ? 24 : 16),
+            color: AppTheme.primaryColor.withValues(alpha: (isDark ? 24 : 16) / 255),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: AppTheme.primaryColor.withAlpha(isDark ? 70 : 55),
+              color: AppTheme.primaryColor.withValues(alpha: (isDark ? 70 : 55) / 255),
             ),
           ),
           child: const Row(
@@ -1963,7 +1963,7 @@ class _TypeBadge extends StatelessWidget {
           style: TextStyle(
               fontSize: 9,
               fontWeight: FontWeight.w700,
-              color: AppTheme.primaryColor.withAlpha(isTimeout ? 100 : 255),
+              color: AppTheme.primaryColor.withValues(alpha: (isTimeout ? 100 : 255) / 255),
               letterSpacing: 0.5)),
     );
   }
@@ -2011,7 +2011,7 @@ class _TutorialStep extends StatelessWidget {
           width: 26,
           height: 26,
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withAlpha(isDark ? 30 : 20),
+            color: AppTheme.primaryColor.withValues(alpha: (isDark ? 30 : 20) / 255),
             shape: BoxShape.circle,
           ),
           child: Center(
