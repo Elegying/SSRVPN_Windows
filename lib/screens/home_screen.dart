@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../models/proxy_node.dart';
+import 'package:ssrvpn_shared/models/proxy_node.dart';
 import '../models/app_settings.dart';
 import '../services/clash_service.dart';
 import '../services/subscription_service.dart';

@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:yaml/yaml.dart';
-import '../models/proxy_node.dart';
+import 'package:ssrvpn_shared/models/proxy_node.dart';
 import '../models/app_settings.dart';
 import 'system_proxy_service.dart';
 

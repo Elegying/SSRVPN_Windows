@@ -5,9 +5,9 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:yaml/yaml.dart';
 import 'package:uuid/uuid.dart';
-import '../models/subscription.dart';
-import '../models/proxy_node.dart';
-import '../models/proxy_group.dart';
+import 'package:ssrvpn_shared/models/subscription.dart';
+import 'package:ssrvpn_shared/models/proxy_node.dart';
+import 'package:ssrvpn_shared/models/proxy_group.dart';
 
 /// 订阅管理服务
 class SubscriptionService extends ChangeNotifier {
