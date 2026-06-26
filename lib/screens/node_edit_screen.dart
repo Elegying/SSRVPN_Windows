@@ -440,7 +440,7 @@ class _NodeEditScreenState extends State<NodeEditScreen> {
       decoration: BoxDecoration(
         color: AppTheme.warningColor.withAlpha(isDark ? 22 : 16),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.warningColor.withAlpha(70)),
+        border: Border.all(color: AppTheme.warningColor.withValues(alpha: 70 / 255)),
       ),
       child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -224,7 +224,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: AppTheme.warningColor.withAlpha(20),
+                      color: AppTheme.warningColor.withValues(alpha: 20 / 255),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.wifi_off_rounded,
@@ -257,7 +257,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: AppTheme.errorColor.withAlpha(10),
+                      color: AppTheme.errorColor.withValues(alpha: 10 / 255),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -265,7 +265,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                           fontSize: 12,
-                          color: AppTheme.errorColor.withAlpha(180)),
+                          color: AppTheme.errorColor.withValues(alpha: 180 / 255)),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -327,7 +327,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   style: TextStyle(
                     fontSize: 13,
                     color: Theme.of(context).brightness == Brightness.dark
-                        ? Colors.white.withAlpha(120)
+                        ? Colors.white.withValues(alpha: 120 / 255)
                         : AppTheme.lightTextSecondary,
                   ),
                 ),
@@ -458,7 +458,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 style: TextStyle(
                   fontSize: compact ? 12 : 13,
                   color: isDark
-                      ? Colors.white.withAlpha(100)
+                      ? Colors.white.withValues(alpha: 100 / 255)
                       : AppTheme.lightTextSecondary,
                 ),
               ),
@@ -655,9 +655,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               onPressed: _isAdding ? null : _addSubscription,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryColor,
-                disabledBackgroundColor: AppTheme.primaryColor.withAlpha(100),
+                disabledBackgroundColor: AppTheme.primaryColor.withValues(alpha: 100 / 255),
                 foregroundColor: Colors.white,
-                shadowColor: AppTheme.primaryColor.withAlpha(60),
+                shadowColor: AppTheme.primaryColor.withValues(alpha: 60 / 255),
                 elevation: 4,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
@@ -701,7 +701,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
               decoration: BoxDecoration(
-                color: AppTheme.primaryColor.withAlpha(30),
+                color: AppTheme.primaryColor.withValues(alpha: 30 / 255),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
@@ -749,8 +749,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isSuccess
-              ? AppTheme.successColor.withAlpha(40)
-              : AppTheme.errorColor.withAlpha(40),
+              ? AppTheme.successColor.withValues(alpha: 40 / 255)
+              : AppTheme.errorColor.withValues(alpha: 40 / 255),
         ),
       ),
       child: Row(
@@ -791,8 +791,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      AppTheme.primaryColor.withAlpha(40),
-                      AppTheme.accentColor.withAlpha(40),
+                      AppTheme.primaryColor.withValues(alpha: 40 / 255),
+                      AppTheme.accentColor.withValues(alpha: 40 / 255),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(10),
@@ -823,7 +823,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       style: TextStyle(
                         fontSize: 12,
                         color: isDark
-                            ? Colors.white.withAlpha(60)
+                            ? Colors.white.withValues(alpha: 60 / 255)
                             : AppTheme.lightTextHint,
                       ),
                       maxLines: 1,
@@ -837,7 +837,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 icon: Icon(
                   Icons.delete_outline,
                   size: 22,
-                  color: AppTheme.errorColor.withAlpha(150),
+                  color: AppTheme.errorColor.withValues(alpha: 150 / 255),
                 ),
                 padding: const EdgeInsets.all(4),
                 constraints: const BoxConstraints(),
@@ -865,7 +865,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 Icons.access_time,
                 size: 14,
                 color: isDark
-                    ? Colors.white.withAlpha(60)
+                    ? Colors.white.withValues(alpha: 60 / 255)
                     : AppTheme.lightTextHint,
               ),
               const SizedBox(width: 4),
@@ -876,7 +876,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 style: TextStyle(
                   fontSize: 12,
                   color: isDark
-                      ? Colors.white.withAlpha(60)
+                      ? Colors.white.withValues(alpha: 60 / 255)
                       : AppTheme.lightTextHint,
                 ),
               ),
@@ -895,7 +895,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         color: color,
         shape: BoxShape.circle,
         boxShadow: [
-          BoxShadow(color: color.withAlpha(100), blurRadius: 4),
+          BoxShadow(color: color.withValues(alpha: 100 / 255), blurRadius: 4),
         ],
       ),
     );
@@ -913,8 +913,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    AppTheme.primaryColor.withAlpha(20),
-                    AppTheme.accentColor.withAlpha(20),
+                    AppTheme.primaryColor.withValues(alpha: 20 / 255),
+                    AppTheme.accentColor.withValues(alpha: 20 / 255),
                   ],
                 ),
                 shape: BoxShape.circle,
@@ -922,7 +922,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               child: Icon(
                 Icons.rss_feed,
                 size: 40,
-                color: AppTheme.primaryColor.withAlpha(100),
+                color: AppTheme.primaryColor.withValues(alpha: 100 / 255),
               ),
             ),
             const SizedBox(height: 24),
@@ -932,7 +932,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 fontSize: 18,
                 fontWeight: FontWeight.w500,
                 color: isDark
-                    ? Colors.white.withAlpha(120)
+                    ? Colors.white.withValues(alpha: 120 / 255)
                     : AppTheme.lightTextSecondary,
               ),
             ),
@@ -942,7 +942,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               style: TextStyle(
                 fontSize: 13,
                 color: isDark
-                    ? Colors.white.withAlpha(60)
+                    ? Colors.white.withValues(alpha: 60 / 255)
                     : AppTheme.lightTextHint,
               ),
             ),
@@ -978,9 +978,9 @@ class _AboutButton extends StatelessWidget {
           height: 34,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withAlpha(20),
+            color: AppTheme.primaryColor.withValues(alpha: 20 / 255),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppTheme.primaryColor.withAlpha(55)),
+            border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 55 / 255)),
           ),
           child: const Row(
             mainAxisSize: MainAxisSize.min,
@@ -1026,7 +1026,7 @@ class _AboutInfoPanel extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withAlpha(5) : Colors.black.withAlpha(5),
+        color: isDark ? Colors.white.withValues(alpha: 5 / 255) : Colors.black.withValues(alpha: 5 / 255),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(

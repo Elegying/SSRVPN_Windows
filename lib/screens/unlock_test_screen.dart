@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/clash_service.dart';
 import '../services/settings_service.dart';
-import '../services/unlock_test_service.dart';
+import 'package:ssrvpn_shared/services/unlock_test_service.dart';
 import '../theme/app_theme.dart';
 
 class UnlockTestScreen extends StatefulWidget {
@@ -236,7 +236,7 @@ class _InfoStrip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 height: 1.35,
-                color: color.withAlpha(230),
+                color: color.withValues(alpha: 230 / 255),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -271,7 +271,7 @@ class _UnlockCard extends StatelessWidget {
         item.checkedAt == null ? '尚未测试' : _formatTime(item.checkedAt!);
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withAlpha(6) : Colors.white,
+        color: isDark ? Colors.white.withValues(alpha: 6 / 255) : Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: statusColor.withAlpha(item.isPending ? 38 : 90),
@@ -280,7 +280,7 @@ class _UnlockCard extends StatelessWidget {
         boxShadow: [
           if (!isDark)
             BoxShadow(
-              color: Colors.black.withAlpha(10),
+              color: Colors.black.withValues(alpha: 10 / 255),
               blurRadius: 16,
               offset: const Offset(0, 6),
             ),
@@ -297,7 +297,7 @@ class _UnlockCard extends StatelessWidget {
                   width: 30,
                   height: 30,
                   decoration: BoxDecoration(
-                    color: statusColor.withAlpha(18),
+                    color: statusColor.withValues(alpha: 18 / 255),
                     borderRadius: BorderRadius.circular(9),
                   ),
                   child: Icon(_statusIcon(item), size: 17, color: statusColor),
@@ -321,7 +321,7 @@ class _UnlockCard extends StatelessWidget {
                     width: 30,
                     height: 30,
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withAlpha(18),
+                      color: AppTheme.primaryColor.withValues(alpha: 18 / 255),
                       shape: BoxShape.circle,
                     ),
                     child: isTesting
@@ -482,9 +482,9 @@ class _HeaderActionButton extends StatelessWidget {
           height: 34,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withAlpha(20),
+            color: AppTheme.primaryColor.withValues(alpha: 20 / 255),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppTheme.primaryColor.withAlpha(55)),
+            border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 55 / 255)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

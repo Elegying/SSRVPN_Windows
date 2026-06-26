@@ -205,7 +205,7 @@ class _SSRVpnAppState extends State<SSRVpnApp> with WindowListener {
                     width: 72,
                     height: 72,
                     decoration: BoxDecoration(
-                      color: AppTheme.errorColor.withAlpha(20),
+                      color: AppTheme.errorColor.withValues(alpha: 20 / 255),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.error_outline,

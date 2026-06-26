@@ -104,7 +104,7 @@ class _ConnectionButtonState extends State<ConnectionButton>
                             size: 32,
                             shadows: [
                               Shadow(
-                                color: Colors.black.withAlpha(60),
+                                color: Colors.black.withValues(alpha: 60 / 255),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
@@ -114,7 +114,7 @@ class _ConnectionButtonState extends State<ConnectionButton>
                           Text(
                             widget.isConnected ? '断开' : '连接',
                             style: TextStyle(
-                              color: Colors.white.withAlpha(220),
+                              color: Colors.white.withValues(alpha: 220 / 255),
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 1,
@@ -211,8 +211,8 @@ class _ConnectionButtonPainter extends CustomPainter {
 
     // 阴影
     final shadowColor = isConnected
-        ? AppTheme.successColor.withAlpha(80)
-        : AppTheme.primaryColor.withAlpha(80);
+        ? AppTheme.successColor.withValues(alpha: 80 / 255)
+        : AppTheme.primaryColor.withValues(alpha: 80 / 255);
     canvas.drawCircle(
       center + const Offset(0, 4),
       buttonRadius,
@@ -233,7 +233,7 @@ class _ConnectionButtonPainter extends CustomPainter {
       center,
       buttonRadius,
       Paint()
-        ..color = Colors.white.withAlpha(30)
+        ..color = Colors.white.withValues(alpha: 30 / 255)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5,
     );
@@ -259,7 +259,7 @@ class _ConnectionButtonPainter extends CustomPainter {
           endAngle: startAngle + sweepAngle,
           colors: [
             Colors.transparent,
-            AppTheme.successLight.withAlpha(150),
+            AppTheme.successLight.withValues(alpha: 150 / 255),
             Colors.transparent,
           ],
         ).createShader(rect),

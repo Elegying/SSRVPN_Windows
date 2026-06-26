@@ -144,8 +144,8 @@ class UpdateService {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: isDark
-                        ? Colors.white.withAlpha(5)
-                        : Colors.black.withAlpha(5),
+                        ? Colors.white.withValues(alpha: 5 / 255)
+                        : Colors.black.withValues(alpha: 5 / 255),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: SingleChildScrollView(

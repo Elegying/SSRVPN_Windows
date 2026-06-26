@@ -136,17 +136,17 @@ class _GlassContainerState extends State<GlassContainer>
           end: Alignment.bottomRight,
           colors: isDark
               ? [
-                  Colors.white.withAlpha(12),
-                  Colors.white.withAlpha(6),
+                  Colors.white.withValues(alpha: 12 / 255),
+                  Colors.white.withValues(alpha: 6 / 255),
                 ]
               : [
-                  Colors.white.withAlpha(40),
-                  Colors.white.withAlpha(20),
+                  Colors.white.withValues(alpha: 40 / 255),
+                  Colors.white.withValues(alpha: 20 / 255),
                 ],
         ),
         border: Border.all(
           color:
-              isDark ? Colors.white.withAlpha(18) : Colors.white.withAlpha(35),
+              isDark ? Colors.white.withValues(alpha: 18 / 255) : Colors.white.withValues(alpha: 35 / 255),
           width: 0.5,
         ),
       ),
@@ -168,7 +168,7 @@ class GlassInputDecoration extends InputDecoration {
   }) : super(
           filled: true,
           fillColor:
-              isDark ? Colors.white.withAlpha(10) : Colors.white.withAlpha(25),
+              isDark ? Colors.white.withValues(alpha: 10 / 255) : Colors.white.withValues(alpha: 25 / 255),
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           border: OutlineInputBorder(
@@ -186,19 +186,19 @@ class GlassInputDecoration extends InputDecoration {
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(
-              color: const Color(0xFF7B68EE).withAlpha(150),
+              color: const Color(0xFF7B68EE).withValues(alpha: 150 / 255),
               width: 1.5,
             ),
           ),
           hintStyle: TextStyle(
             color: isDark
-                ? Colors.white.withAlpha(70)
-                : Colors.black.withAlpha(70),
+                ? Colors.white.withValues(alpha: 70 / 255)
+                : Colors.black.withValues(alpha: 70 / 255),
           ),
           labelStyle: TextStyle(
             color: isDark
-                ? Colors.white.withAlpha(100)
-                : Colors.black.withAlpha(120),
+                ? Colors.white.withValues(alpha: 100 / 255)
+                : Colors.black.withValues(alpha: 120 / 255),
           ),
         );
 }

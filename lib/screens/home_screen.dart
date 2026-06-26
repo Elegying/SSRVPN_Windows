@@ -295,7 +295,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: AppTheme.primaryColor.withAlpha(22),
+                              color: AppTheme.primaryColor.withValues(alpha: 22 / 255),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: const Icon(
@@ -334,8 +334,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           errorText: inputError,
                           filled: true,
                           fillColor: isDark
-                              ? Colors.white.withAlpha(6)
-                              : Colors.black.withAlpha(4),
+                              ? Colors.white.withValues(alpha: 6 / 255)
+                              : Colors.black.withValues(alpha: 4 / 255),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
@@ -1131,7 +1131,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withAlpha(20),
+                    color: AppTheme.primaryColor.withValues(alpha: 20 / 255),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: const Text('Windows',
@@ -1147,7 +1147,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: AppTheme.successColor.withAlpha(20),
+                    color: AppTheme.successColor.withValues(alpha: 20 / 255),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Row(
@@ -1296,7 +1296,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                         horizontal: 10, vertical: 4),
                                     decoration: BoxDecoration(
                                       color:
-                                          AppTheme.successColor.withAlpha(15),
+                                          AppTheme.successColor.withValues(alpha: 15 / 255),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
@@ -1313,11 +1313,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 12, vertical: 8),
                                     decoration: BoxDecoration(
-                                      color: AppTheme.errorColor.withAlpha(15),
+                                      color: AppTheme.errorColor.withValues(alpha: 15 / 255),
                                       borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
                                           color: AppTheme.errorColor
-                                              .withAlpha(40)),
+                                              .withValues(alpha: 40 / 255)),
                                     ),
                                     child: Column(
                                       crossAxisAlignment:
@@ -1353,7 +1353,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                                       fontSize: 11,
                                                       color: AppTheme
                                                           .warningColor
-                                                          .withAlpha(200),
+                                                          .withValues(alpha: 200 / 255),
                                                       decoration: TextDecoration
                                                           .underline)),
                                             ],
@@ -1391,7 +1391,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withAlpha(5) : Colors.black.withAlpha(5),
+        color: isDark ? Colors.white.withValues(alpha: 5 / 255) : Colors.black.withValues(alpha: 5 / 255),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
@@ -1470,7 +1470,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: selected
-                        ? AppTheme.primaryColor.withAlpha(120)
+                        ? AppTheme.primaryColor.withValues(alpha: 120 / 255)
                         : (isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
                   ),
                 ),
@@ -1587,7 +1587,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withAlpha(20),
+                    color: AppTheme.primaryColor.withValues(alpha: 20 / 255),
                     borderRadius: BorderRadius.circular(8)),
                 child: Text('${_nodes.length}',
                     style: const TextStyle(
@@ -1642,10 +1642,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withAlpha(10),
+                  color: AppTheme.primaryColor.withValues(alpha: 10 / 255),
                   shape: BoxShape.circle),
               child: Icon(Icons.dns_outlined,
-                  size: 32, color: AppTheme.primaryColor.withAlpha(100)),
+                  size: 32, color: AppTheme.primaryColor.withValues(alpha: 100 / 255)),
             ),
             const SizedBox(height: 20),
             Text('暂无节点',
@@ -1815,8 +1815,8 @@ class _NodeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveTextColor = isTimeout ? textColor.withAlpha(80) : textColor;
-    final effectiveSubColor = isTimeout ? subColor.withAlpha(60) : subColor;
+    final effectiveTextColor = isTimeout ? textColor.withValues(alpha: 80 / 255) : textColor;
+    final effectiveSubColor = isTimeout ? subColor.withValues(alpha: 60 / 255) : subColor;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -1829,12 +1829,12 @@ class _NodeCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             color: isSelected
                 ? (isDark
-                    ? AppTheme.successColor.withAlpha(15)
-                    : AppTheme.successColor.withAlpha(10))
+                    ? AppTheme.successColor.withValues(alpha: 15 / 255)
+                    : AppTheme.successColor.withValues(alpha: 10 / 255))
                 : null,
             border: Border.all(
               color: isSelected
-                  ? AppTheme.successColor.withAlpha(80)
+                  ? AppTheme.successColor.withValues(alpha: 80 / 255)
                   : isDark
                       ? AppTheme.darkBorder
                       : AppTheme.lightBorder,
@@ -1869,7 +1869,7 @@ class _NodeCard extends StatelessWidget {
                         : isTimeout
                             ? Icon(Icons.close_rounded,
                                 size: 16,
-                                color: AppTheme.errorColor.withAlpha(150))
+                                color: AppTheme.errorColor.withValues(alpha: 150 / 255))
                             : Center(
                                 child: Text(node.name.characters.first,
                                     style: const TextStyle(
@@ -1924,12 +1924,12 @@ class _NodeCard extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                            color: AppTheme.primaryColor.withAlpha(15),
+                            color: AppTheme.primaryColor.withValues(alpha: 15 / 255),
                             borderRadius: BorderRadius.circular(6)),
                         child: Text('测速',
                             style: TextStyle(
                                 fontSize: 11,
-                                color: AppTheme.primaryColor.withAlpha(200))),
+                                color: AppTheme.primaryColor.withValues(alpha: 200 / 255))),
                       ),
                     ),
                 ],
@@ -1988,7 +1988,7 @@ class _LatencyBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-          color: color.withAlpha(15), borderRadius: BorderRadius.circular(6)),
+          color: color.withValues(alpha: 15 / 255), borderRadius: BorderRadius.circular(6)),
       child: Text(text,
           style: TextStyle(
               fontSize: 11, fontWeight: FontWeight.w600, color: color)),
