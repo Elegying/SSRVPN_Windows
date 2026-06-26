@@ -1,5 +1,8 @@
 # SSRVPN Windows
 
+[![CI](https://github.com/Elegying/SSRVPN_Windows/actions/workflows/ci.yml/badge.svg)](https://github.com/Elegying/SSRVPN_Windows/actions/workflows/ci.yml)
+
+
 SSRVPN Windows 版 - 绿色免安装 VPN 客户端
 
 ## 功能特性
@@ -157,3 +160,7 @@ lib/
 ## License
 
 MIT License
+
+## 开发路线图
+
+详见 [REFACTOR_PLAN.md](../REFACTOR_PLAN.md) — 三平台代码去重分期计划。
