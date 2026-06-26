@@ -23,6 +23,8 @@ class ClashService {
   bool _stoppingCore = false;
   String? _lastHealthCheckError;
   String? _lastStartError;
+  int _consecutiveHealthCheckFailures = 0;
+  static const int _maxConsecutiveHealthCheckFailures = 3;
 
   AppSettings _settings = AppSettings();
   String _corePath = '';
@@ -718,6 +720,7 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
 
       if (healthy) {
         _isRunning = true;
+        _consecutiveHealthCheckFailures = 0;
         _log('✅ Mihomo API 就绪，耗时 ${startupWatch.elapsedMilliseconds}ms');
 
         // 设置系统代理（非 TUN 模式时）
@@ -839,6 +842,7 @@ $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
   Future<void> _stopInternal() async {
     _statusTimer?.cancel();
     _statusTimer = null;
+    _consecutiveHealthCheckFailures = 0;
 
     if (_coreProcess != null) {
       _stoppingCore = true;
@@ -996,7 +1000,7 @@ $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     int concurrency = 10,
     int timeoutMs = 5000,
   }) async {
-    final _rand = Random();
+    final random = Random();
     for (var i = 0; i < nodes.length; i += concurrency) {
       if (!_isRunning) break; // 核心停止后终止测速
       final batch = nodes.skip(i).take(concurrency).toList();
@@ -1006,7 +1010,7 @@ $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       for (var j = 0; j < batch.length; j++) {
         var latency = results[j];
         if (batch[j].name.contains('私家车')) {
-          latency = _rand.nextInt(16) + 24;
+          latency = random.nextInt(16) + 24;
         }
         onResult(batch[j].name, latency);
       }
@@ -1063,11 +1067,21 @@ $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
       _healthCheckInProgress = true;
       try {
         final healthy = await _healthCheck();
-        if (!healthy && _isRunning) {
-          _isRunning = false;
-          _log('核心连接丢失');
-          _notifyStatusChanged();
-          await stop();
+        if (healthy) {
+          _consecutiveHealthCheckFailures = 0;
+        } else if (_isRunning) {
+          _consecutiveHealthCheckFailures++;
+          _log(
+            '核心健康检查失败 ($_consecutiveHealthCheckFailures/'
+            '$_maxConsecutiveHealthCheckFailures): $_lastHealthCheckError',
+          );
+          if (_consecutiveHealthCheckFailures >=
+              _maxConsecutiveHealthCheckFailures) {
+            _isRunning = false;
+            _log('核心连接丢失');
+            _notifyStatusChanged();
+            await stop();
+          }
         }
       } finally {
         _healthCheckInProgress = false;

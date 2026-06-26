@@ -49,18 +49,20 @@ class _SSRVpnAppState extends State<SSRVpnApp> with WindowListener {
     try {
       _settingsService = await SettingsService.getInstance();
       _clashService = clash.ClashService();
-      await _clashService!.init(
-        _settingsService!.settings,
-        dataDir: _settingsService!.dataDir,
-        storageNotice: _settingsService!.storageNotice,
-      ).timeout(
-        const Duration(seconds: 90),
-        onTimeout: () => throw TimeoutException('核心服务初始化超时（90秒）'),
-      );
+      await _clashService!
+          .init(
+            _settingsService!.settings,
+            dataDir: _settingsService!.dataDir,
+            storageNotice: _settingsService!.storageNotice,
+          )
+          .timeout(
+            const Duration(seconds: 90),
+            onTimeout: () => throw TimeoutException('核心服务初始化超时（90秒）'),
+          );
       _clashService!.addStatusListener(_handleCoreStatusChanged);
       final appDataDir = _clashService!.configDir;
-      _subscriptionService = await SubscriptionService.getInstance(appDataDir)
-          .timeout(
+      _subscriptionService =
+          await SubscriptionService.getInstance(appDataDir).timeout(
         const Duration(seconds: 30),
         onTimeout: () => throw TimeoutException('订阅服务初始化超时（30秒）'),
       );
@@ -150,6 +152,7 @@ class _SSRVpnAppState extends State<SSRVpnApp> with WindowListener {
   Future<void> _quitApp() async {
     if (_isQuitting) return;
     _isQuitting = true;
+    await _settingsService?.flush();
     await _clashService?.stop();
     await _trayManager.destroy();
     await windowManager.setPreventClose(false);

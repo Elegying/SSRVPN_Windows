@@ -44,10 +44,10 @@ powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass `
   -File .\tool\package_windows.ps1
 ```
 
-最终产物为 `SSRVPN_Windows_Release.zip`。构建完成后，ZIP 内包含：
+最终产物为项目根目录下的 `SSRVPN.zip`。构建完成后，ZIP 内包含：
 
 ```
-SSRVPN_Windows/
+SSRVPN_Windows_Release/
 ├── ssrvpn_windows.exe    # 主程序
 ├── mihomo.exe            # Mihomo 核心
 ├── ssrvpn/               # 配置目录 (首次运行自动创建)

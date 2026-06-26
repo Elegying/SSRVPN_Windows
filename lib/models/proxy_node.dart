@@ -32,7 +32,8 @@ class ProxyNode {
     bool? isOnline,
     DateTime? lastLatencyTest,
     Map<String, dynamic>? extra,
-  }) => ProxyNode(
+  }) =>
+      ProxyNode(
         name: name ?? this.name,
         type: type ?? this.type,
         server: server ?? this.server,
@@ -85,6 +86,19 @@ class ProxyNode {
     if (latency == null) return '超时';
     if (latency! < 0) return '超时';
     return '${latency}ms';
+  }
+
+  /// 是否为超时节点
+  bool get isTimedOut => latency == null || latency! < 0;
+
+  /// 获取用于显示的延迟值（私家车节点强制 23-39ms）
+  int? get effectiveLatency {
+    if (isTimedOut) return null;
+    if (name.contains('私家车')) {
+      final seed = name.hashCode.abs();
+      return 23 + (seed % 17); // 23 ~ 39
+    }
+    return latency;
   }
 
   /// 从Clash YAML配置中的proxy条目创建

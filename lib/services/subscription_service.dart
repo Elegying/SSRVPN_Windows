@@ -623,7 +623,7 @@ class SubscriptionService extends ChangeNotifier {
       }
     } catch (e) {
       // YAML解析失败，保留订阅缓存中的原始数据
-      print('[SubscriptionService] YAML解析失败: $e');
+      debugPrint('[SubscriptionService] YAML解析失败: $e');
     }
   }
 
