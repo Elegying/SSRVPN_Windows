@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:yaml/yaml.dart';
 import 'package:ssrvpn_shared/models/proxy_node.dart';
+import 'package:ssrvpn_shared/utils/private_node_latency_policy.dart';
 import '../models/app_settings.dart';
 import 'system_proxy_service.dart';
 
@@ -23,8 +24,15 @@ class ClashService {
   bool _stoppingCore = false;
   String? _lastHealthCheckError;
   String? _lastStartError;
+  String? _startupDisabledReason;
   int _consecutiveHealthCheckFailures = 0;
   static const int _maxConsecutiveHealthCheckFailures = 3;
+  static const String _geoProxyGroupName = 'SSRVPN-GEO';
+  static const List<String> _geoLookupHosts = [
+    'api.country.is',
+    'ipinfo.io',
+    'ifconfig.co',
+  ];
 
   AppSettings _settings = AppSettings();
   String _corePath = '';
@@ -46,6 +54,8 @@ class ClashService {
   String get configDir => _configDir;
   String get logPath => _logFile?.path ?? '';
   String? get lastStartError => _lastStartError;
+  String? get startupDisabledReason => _startupDisabledReason;
+  bool get isStartupDisabled => _startupDisabledReason != null;
   int get runtimeProxyPort => _settings.proxyPort;
   int get runtimeSocksPort => _settings.socksPort;
   int get runtimeApiPort => _settings.apiPort;
@@ -61,13 +71,21 @@ class ClashService {
     _settings = settings;
   }
 
+  void disableStartup(String reason) {
+    _startupDisabledReason = reason;
+    _lastStartError = reason;
+    _log(reason);
+  }
+
   /// 初始化服务
   Future<void> init(
     AppSettings settings, {
     String? dataDir,
     String? storageNotice,
+    bool skipCoreProbes = false,
   }) async {
     _settings = settings;
+    _startupDisabledReason = null;
 
     final exeDir = File(Platform.resolvedExecutable).parent.path;
     _configDir = dataDir ?? '$exeDir${Platform.pathSeparator}ssrvpn';
@@ -77,7 +95,9 @@ class ClashService {
     _logFile = File('$_configDir${Platform.pathSeparator}ssrvpn.log');
     await _rotateLogFile();
     await _proxyService.initialize(_configDir);
-    await _terminateOrphanedCores();
+    if (!skipCoreProbes) {
+      await _terminateOrphanedCores();
+    }
 
     _log('系统: ${Platform.operatingSystemVersion}');
     _log('程序路径: ${Platform.resolvedExecutable}');
@@ -96,14 +116,18 @@ class ClashService {
     if (await coreFile.exists()) {
       final size = await coreFile.length();
       _log('✅ 核心文件存在: ${(size / 1024 / 1024).toStringAsFixed(1)} MB');
-      await _logCoreVersion();
+      if (!skipCoreProbes) {
+        await _logCoreVersion();
+      }
     } else {
       _log('❌ 核心文件不存在: $_corePath');
       _log('请将 mihomo.exe 放到应用目录下');
     }
 
     // 预下载 MMDB 文件
-    await _ensureMMDB();
+    if (!skipCoreProbes) {
+      await _ensureMMDB();
+    }
   }
 
   Future<void> _rotateLogFile() async {
@@ -358,9 +382,7 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
       final address = InternetAddress.tryParse(host);
       if (address == null) {
         rules.add('DOMAIN-SUFFIX,$host,PROXY');
-      } else if (address.type == InternetAddressType.IPv6) {
-        rules.add('IP-CIDR6,$host/128,PROXY,no-resolve');
-      } else {
+      } else if (address.type == InternetAddressType.IPv4) {
         rules.add('IP-CIDR,$host/32,PROXY,no-resolve');
       }
     }
@@ -482,6 +504,7 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
     result.writeln('mode: ${settings.proxyMode.name}');
     result.writeln('log-level: info');
     result.writeln("external-controller: '127.0.0.1:${settings.apiPort}'");
+    result.writeln('# SSRVPN 当前明确只支持 IPv4 节点与 IPv4 流量');
     result.writeln('ipv6: false');
     if (settings.apiSecret.isNotEmpty) {
       result.writeln('secret: ${_quote(settings.apiSecret)}');
@@ -559,6 +582,13 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
     for (final name in selectedProxyNames) {
       result.writeln("      - ${_quote(name)}");
     }
+    result.writeln('  - name: GLOBAL');
+    result.writeln('    type: select');
+    result.writeln('    proxies:');
+    result.writeln("      - 'PROXY'");
+    for (final name in selectedProxyNames) {
+      result.writeln("      - ${_quote(name)}");
+    }
     result.writeln('  - name: 自动选择');
     result.writeln('    type: url-test');
     result.writeln('    proxies:');
@@ -567,12 +597,21 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
     }
     result.writeln('    url: ${_quote(settings.latencyTestUrl)}');
     result.writeln('    interval: 300');
+    result.writeln('  - name: $_geoProxyGroupName');
+    result.writeln('    type: select');
+    result.writeln('    proxies:');
+    for (final name in selectedProxyNames) {
+      result.writeln("      - ${_quote(name)}");
+    }
 
     // Rules
     result.writeln();
     result.writeln('rules:');
     for (final rule in _buildForceProxyRules(settings)) {
       result.writeln('  - ${_quote(rule)}');
+    }
+    for (final host in _geoLookupHosts) {
+      result.writeln("  - 'DOMAIN,$host,$_geoProxyGroupName'");
     }
     result.writeln("  - 'DOMAIN-SUFFIX,cn,DIRECT'");
     if (mmdbExists) {
@@ -586,6 +625,12 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
 
   /// 写入配置
   Future<void> writeConfig(String configContent) async {
+    if (_startupDisabledReason != null) {
+      throw StateError(_startupDisabledReason!);
+    }
+    if (_configPath.isEmpty) {
+      throw StateError('Mihomo service is not initialized');
+    }
     final file = File(_configPath);
     final temp = File('$_configPath.tmp');
     await temp.writeAsString(configContent);
@@ -611,6 +656,17 @@ Get-CimInstance Win32_Process -Filter "Name='mihomo.exe'" |
     if (stopping != null) await stopping;
     _lastStartError = null;
     _lastHealthCheckError = null;
+
+    if (_startupDisabledReason != null) {
+      _lastStartError = _startupDisabledReason;
+      _log(_startupDisabledReason!);
+      return false;
+    }
+    if (_corePath.isEmpty || _configDir.isEmpty || _configPath.isEmpty) {
+      _lastStartError = 'Mihomo service is not initialized';
+      _log(_lastStartError!);
+      return false;
+    }
 
     if (_isRunning) {
       try {
@@ -907,6 +963,27 @@ $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     }
   }
 
+  Future<String?> verifyUserConnectivity() async {
+    final client = IOClient(
+      HttpClient()
+        ..connectionTimeout = const Duration(seconds: 5)
+        ..findProxy = (_) => 'PROXY 127.0.0.1:${_settings.proxyPort}; DIRECT',
+    );
+    try {
+      final response = await client
+          .get(Uri.parse('http://www.gstatic.com/generate_204'))
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode == 204 || response.statusCode == 200) {
+        return null;
+      }
+      return '已连接，但网络验证返回 HTTP ${response.statusCode}，请尝试切换节点';
+    } catch (_) {
+      return '已连接，但网络验证失败，请尝试切换节点或刷新订阅';
+    } finally {
+      client.close();
+    }
+  }
+
   Future<bool> _validateConfig(Map<String, String> environment) async {
     _log('正在校验 Mihomo 配置...');
     final watch = Stopwatch()..start();
@@ -973,6 +1050,124 @@ $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
   }
 
   /// 测试延迟 (TCP 连接)
+  Future<String?> detectExitCountryForProxy(
+    String nodeName, {
+    Duration timeout = const Duration(seconds: 7),
+  }) async {
+    if (!_isRunning || nodeName.trim().isEmpty) return null;
+
+    final groupName =
+        _settings.proxyMode == ProxyMode.global ? 'GLOBAL' : _geoProxyGroupName;
+    final previousSelection = groupName == 'GLOBAL'
+        ? await _currentProxyGroupSelection(groupName)
+        : null;
+
+    final switched = await _switchProxyGroup(groupName, nodeName);
+    if (!switched) return null;
+
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      return await _queryExitCountry(timeout: timeout);
+    } finally {
+      if (previousSelection != null &&
+          previousSelection.isNotEmpty &&
+          previousSelection != nodeName) {
+        await _switchProxyGroup(groupName, previousSelection);
+      }
+    }
+  }
+
+  Future<String?> _currentProxyGroupSelection(String groupName) async {
+    try {
+      final response = await _apiClient
+          .get(
+            Uri.parse(_apiUrl('/proxies/${Uri.encodeComponent(groupName)}')),
+            headers: _apiHeaders(),
+          )
+          .timeout(const Duration(seconds: 3));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return null;
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        return decoded['now']?.toString();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<String?> _queryExitCountry({required Duration timeout}) async {
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 4)
+      ..findProxy = (_) => 'PROXY 127.0.0.1:${_settings.proxyPort}; DIRECT';
+    try {
+      for (final uri in const [
+        'https://api.country.is/',
+        'https://ipinfo.io/country',
+        'https://ifconfig.co/country-iso',
+      ]) {
+        final country = await _queryExitCountryFrom(
+          client,
+          Uri.parse(uri),
+          timeout,
+        );
+        if (country != null) return country;
+      }
+    } finally {
+      client.close(force: true);
+    }
+    return null;
+  }
+
+  Future<String?> _queryExitCountryFrom(
+    HttpClient client,
+    Uri uri,
+    Duration timeout,
+  ) async {
+    try {
+      final request = await client.getUrl(uri).timeout(timeout);
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json,text/*');
+      request.headers.set(HttpHeaders.userAgentHeader, 'SSRVPN/2.0');
+      final response = await request.close().timeout(timeout);
+      if (response.statusCode < 200 || response.statusCode >= 500) {
+        return null;
+      }
+      final body = await utf8.decodeStream(response).timeout(timeout);
+      return _parseCountryCode(body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _parseCountryCode(String body) {
+    final text = body.trim();
+    if (text.isEmpty) return null;
+    final plain = _normalizeCountryCode(text);
+    if (plain != null) return plain;
+
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map<String, dynamic>) {
+        for (final key in const ['country', 'countryCode', 'country_code']) {
+          final value = decoded[key]?.toString();
+          final code = _normalizeCountryCode(value);
+          if (code != null) return code;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String? _normalizeCountryCode(String? value) {
+    final code = value?.trim().toUpperCase() ?? '';
+    if (code.length != 2 || !RegExp(r'^[A-Z]{2}$').hasMatch(code)) {
+      return null;
+    }
+    if (code == 'UK') return 'GB';
+    if (code == 'EL') return 'GR';
+    return code;
+  }
+
   Future<int> testLatency(
     String server,
     int port, {
@@ -1008,10 +1203,11 @@ $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
         batch.map((n) => testLatency(n.server, n.port, timeoutMs: timeoutMs)),
       );
       for (var j = 0; j < batch.length; j++) {
-        var latency = results[j];
-        if (batch[j].name.contains('私家车')) {
-          latency = random.nextInt(16) + 24;
-        }
+        final latency = PrivateNodeLatencyPolicy.displayLatencyForNode(
+          batch[j].name,
+          results[j],
+          random: random,
+        );
         onResult(batch[j].name, latency);
       }
     }
@@ -1019,6 +1215,29 @@ $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
   /// 切换代理节点
   Future<bool> switchProxy(String groupName, String nodeName) async {
+    final ok = await _switchProxyGroup(groupName, nodeName);
+    if (ok) {
+      await _closeConnections();
+    }
+    return ok;
+  }
+
+  Future<bool> switchSelectedProxy(String nodeName) async {
+    final proxyOk = await _switchProxyGroup('PROXY', nodeName);
+    var globalOk = true;
+    if (_settings.proxyMode == ProxyMode.global) {
+      globalOk = await _switchProxyGroup('GLOBAL', 'PROXY');
+      if (!globalOk) {
+        globalOk = await _switchProxyGroup('GLOBAL', nodeName);
+      }
+    }
+    if (proxyOk && globalOk) {
+      await _closeConnections();
+    }
+    return proxyOk && globalOk;
+  }
+
+  Future<bool> _switchProxyGroup(String groupName, String nodeName) async {
     try {
       final url = _apiUrl('/proxies/${Uri.encodeComponent(groupName)}');
       _log('切换代理: group=$groupName, node=$nodeName');
@@ -1036,18 +1255,6 @@ $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
       if (response.statusCode == 200 || response.statusCode == 204) {
         _log('✅ 代理切换成功: $nodeName');
-        // 断开现有连接，使新代理生效
-        try {
-          await _apiClient
-              .delete(
-                Uri.parse(_apiUrl('/connections')),
-                headers: _apiHeaders(),
-              )
-              .timeout(const Duration(seconds: 3));
-          _log('✅ 已断开旧连接');
-        } catch (e) {
-          _log('断开旧连接失败 (可忽略): $e');
-        }
         return true;
       }
       _log('❌ 代理切换失败: HTTP ${response.statusCode}');
@@ -1055,6 +1262,20 @@ $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     } catch (e) {
       _log('❌ 切换代理异常: $e');
       return false;
+    }
+  }
+
+  Future<void> _closeConnections() async {
+    try {
+      await _apiClient
+          .delete(
+            Uri.parse(_apiUrl('/connections')),
+            headers: _apiHeaders(),
+          )
+          .timeout(const Duration(seconds: 3));
+      _log('✅ 已断开旧连接');
+    } catch (e) {
+      _log('断开旧连接失败 (可忽略): $e');
     }
   }
 

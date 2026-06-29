@@ -120,7 +120,12 @@ class TrayManager {
   /// 刷新菜单状态
   Future<void> refreshMenu() async {
     if (!_initialized) return;
-    await _buildMenu();
+    try {
+      await _buildMenu();
+    } catch (e, stack) {
+      debugPrint('[Tray] refreshMenu failed: $e');
+      debugPrint('[Tray] stack: $stack');
+    }
   }
 
   /// 更新工具提示

@@ -37,7 +37,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         const SnackBar(
           behavior: SnackBarBehavior.floating,
           content: Text('请输入订阅链接或SSR链接'),
-          backgroundColor: AppTheme.errorColor,
+          backgroundColor: AppTheme.error,
         ),
       );
       return;
@@ -52,7 +52,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('该订阅已存在，无需重复添加'),
-            backgroundColor: AppTheme.warningColor,
+            backgroundColor: AppTheme.warning,
           ),
         );
         return;
@@ -70,14 +70,14 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('SSR链接已导入，当前共 $nodeCount 个节点'),
-                  backgroundColor: AppTheme.successColor,
+                  backgroundColor: AppTheme.success,
                 ),
               );
             } else {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('SSR链接已添加，但未获取到数据'),
-                  backgroundColor: AppTheme.warningColor,
+                  backgroundColor: AppTheme.warning,
                 ),
               );
             }
@@ -87,7 +87,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('导入失败: $e'),
-                backgroundColor: AppTheme.errorColor,
+                backgroundColor: AppTheme.error,
               ),
             );
           }
@@ -101,7 +101,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('请输入有效的URL地址'),
-                backgroundColor: AppTheme.errorColor,
+                backgroundColor: AppTheme.error,
               ),
             );
           }
@@ -119,14 +119,14 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('订阅成功，获取到 $nodeCount 个节点'),
-                  backgroundColor: AppTheme.successColor,
+                  backgroundColor: AppTheme.success,
                 ),
               );
             } else {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('订阅已添加，但未获取到数据'),
-                  backgroundColor: AppTheme.warningColor,
+                  backgroundColor: AppTheme.warning,
                 ),
               );
             }
@@ -137,7 +137,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('刷新失败: $msg'),
-                backgroundColor: AppTheme.errorColor,
+                backgroundColor: AppTheme.error,
                 duration: const Duration(seconds: 4),
               ),
             );
@@ -149,7 +149,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('添加失败: $e'),
-            backgroundColor: AppTheme.errorColor,
+            backgroundColor: AppTheme.error,
           ),
         );
       }
@@ -224,11 +224,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: AppTheme.warningColor.withValues(alpha: 20 / 255),
+                      color: AppTheme.warning.withValues(alpha: 20 / 255),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.wifi_off_rounded,
-                        size: 28, color: AppTheme.warningColor),
+                        size: 28, color: AppTheme.warning),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -237,7 +237,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: isDark
-                          ? AppTheme.darkTextPrimary
+                          ? AppTheme.textPrimary
                           : AppTheme.lightTextPrimary,
                     ),
                   ),
@@ -248,7 +248,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     style: TextStyle(
                       fontSize: 13,
                       color: isDark
-                          ? AppTheme.darkTextSecondary
+                          ? AppTheme.textSecondary
                           : AppTheme.lightTextSecondary,
                     ),
                   ),
@@ -257,7 +257,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: AppTheme.errorColor.withValues(alpha: 10 / 255),
+                      color: AppTheme.error.withValues(alpha: 10 / 255),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -265,7 +265,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                           fontSize: 12,
-                          color: AppTheme.errorColor.withValues(alpha: 180 / 255)),
+                          color: AppTheme.error.withValues(alpha: 180 / 255)),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -278,13 +278,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10)),
                         backgroundColor:
-                            AppTheme.primaryColor.withValues(alpha: (isDark ? 25 : 15) / 255),
+                            AppTheme.primary.withValues(alpha: (isDark ? 25 : 15) / 255),
                       ),
                       child: const Text('知道了',
                           style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: AppTheme.primaryColor)),
+                              color: AppTheme.primary)),
                     ),
                   ),
                 ],
@@ -314,7 +314,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 const Icon(
                   Icons.warning_amber_rounded,
                   size: 48,
-                  color: AppTheme.warningColor,
+                  color: AppTheme.warning,
                 ),
                 const SizedBox(height: 16),
                 const Text(
@@ -345,7 +345,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       child: ElevatedButton(
                         onPressed: () => Navigator.pop(ctx, true),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.errorColor,
+                          backgroundColor: AppTheme.error,
                         ),
                         child: const Text('删除'),
                       ),
@@ -370,7 +370,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('订阅已删除，但刷新剩余订阅失败，请稍后重试'),
-              backgroundColor: AppTheme.warningColor,
+              backgroundColor: AppTheme.warning,
             ),
           );
         }
@@ -381,7 +381,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('订阅已删除，VPN 已断开'),
-              backgroundColor: AppTheme.warningColor,
+              backgroundColor: AppTheme.warning,
             ),
           );
         }
@@ -473,7 +473,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               height: compact ? 40 : 44,
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [AppTheme.primaryColor, AppTheme.accentColor],
+                  colors: [AppTheme.primary, AppTheme.accentColor],
                 ),
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -523,7 +523,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     height: 52,
                     decoration: const BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [AppTheme.primaryColor, AppTheme.accentColor],
+                        colors: [AppTheme.primary, AppTheme.accentColor],
                       ),
                       shape: BoxShape.circle,
                     ),
@@ -540,7 +540,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
                       color: isDark
-                          ? AppTheme.darkTextPrimary
+                          ? AppTheme.textPrimary
                           : AppTheme.lightTextPrimary,
                     ),
                   ),
@@ -549,7 +549,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     'v${UpdateService.appVersion}',
                     style: TextStyle(
                       fontSize: 13,
-                      color: AppTheme.primaryColor,
+                      color: AppTheme.primary,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -574,7 +574,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: isDark
-                          ? AppTheme.darkTextSecondary
+                          ? AppTheme.textSecondary
                           : AppTheme.lightTextSecondary,
                     ),
                   ),
@@ -588,14 +588,14 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        backgroundColor: AppTheme.primaryColor.withValues(alpha: (isDark ? 25 : 15) / 255),
+                        backgroundColor: AppTheme.primary.withValues(alpha: (isDark ? 25 : 15) / 255),
                       ),
                       child: const Text(
                         '知道了',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: AppTheme.primaryColor,
+                          color: AppTheme.primary,
                         ),
                       ),
                     ),
@@ -652,10 +652,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             child: ElevatedButton(
               onPressed: _isAdding ? null : _addSubscription,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                disabledBackgroundColor: AppTheme.primaryColor.withValues(alpha: 100 / 255),
+                backgroundColor: AppTheme.primary,
+                disabledBackgroundColor: AppTheme.primary.withValues(alpha: 100 / 255),
                 foregroundColor: Colors.white,
-                shadowColor: AppTheme.primaryColor.withValues(alpha: 60 / 255),
+                shadowColor: AppTheme.primary.withValues(alpha: 60 / 255),
                 elevation: 4,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
@@ -699,13 +699,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
               decoration: BoxDecoration(
-                color: AppTheme.primaryColor.withValues(alpha: 30 / 255),
+                color: AppTheme.primary.withValues(alpha: 30 / 255),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 '${subscriptions.length}',
                 style: const TextStyle(
-                  color: AppTheme.primaryColor,
+                  color: AppTheme.primary,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -720,7 +720,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: AppTheme.primaryColor,
+                        color: AppTheme.primary,
                       ),
                     )
                   : const Icon(Icons.refresh, size: 18),
@@ -742,20 +742,20 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: isSuccess
-            ? AppTheme.successColor.withValues(alpha: (isDark ? 15 : 20) / 255)
-            : AppTheme.errorColor.withValues(alpha: (isDark ? 15 : 20) / 255),
+            ? AppTheme.success.withValues(alpha: (isDark ? 15 : 20) / 255)
+            : AppTheme.error.withValues(alpha: (isDark ? 15 : 20) / 255),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isSuccess
-              ? AppTheme.successColor.withValues(alpha: 40 / 255)
-              : AppTheme.errorColor.withValues(alpha: 40 / 255),
+              ? AppTheme.success.withValues(alpha: 40 / 255)
+              : AppTheme.error.withValues(alpha: 40 / 255),
         ),
       ),
       child: Row(
         children: [
           Icon(
             isSuccess ? Icons.check_circle : Icons.error_outline,
-            color: isSuccess ? AppTheme.successColor : AppTheme.errorColor,
+            color: isSuccess ? AppTheme.success : AppTheme.error,
             size: 18,
           ),
           const SizedBox(width: 8),
@@ -764,7 +764,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               _refreshResult!,
               style: TextStyle(
                 fontSize: 13,
-                color: isSuccess ? AppTheme.successColor : AppTheme.errorColor,
+                color: isSuccess ? AppTheme.success : AppTheme.error,
               ),
             ),
           ),
@@ -789,7 +789,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      AppTheme.primaryColor.withValues(alpha: 40 / 255),
+                      AppTheme.primary.withValues(alpha: 40 / 255),
                       AppTheme.accentColor.withValues(alpha: 40 / 255),
                     ],
                   ),
@@ -797,7 +797,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 ),
                 child: const Icon(
                   Icons.rss_feed,
-                  color: AppTheme.primaryColor,
+                  color: AppTheme.primary,
                   size: 22,
                 ),
               ),
@@ -835,7 +835,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 icon: Icon(
                   Icons.delete_outline,
                   size: 22,
-                  color: AppTheme.errorColor.withValues(alpha: 150 / 255),
+                  color: AppTheme.error.withValues(alpha: 150 / 255),
                 ),
                 padding: const EdgeInsets.all(4),
                 constraints: const BoxConstraints(),
@@ -847,7 +847,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           Row(
             children: [
               _buildStatusDot(
-                sub.enabled ? AppTheme.successColor : AppTheme.errorColor,
+                sub.enabled ? AppTheme.success : AppTheme.error,
               ),
               const SizedBox(width: 6),
               Text(
@@ -855,7 +855,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 style: TextStyle(
                   fontSize: 12,
                   color:
-                      sub.enabled ? AppTheme.successColor : AppTheme.errorColor,
+                      sub.enabled ? AppTheme.success : AppTheme.error,
                 ),
               ),
               const SizedBox(width: 16),
@@ -911,7 +911,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    AppTheme.primaryColor.withValues(alpha: 20 / 255),
+                    AppTheme.primary.withValues(alpha: 20 / 255),
                     AppTheme.accentColor.withValues(alpha: 20 / 255),
                   ],
                 ),
@@ -920,7 +920,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               child: Icon(
                 Icons.rss_feed,
                 size: 40,
-                color: AppTheme.primaryColor.withValues(alpha: 100 / 255),
+                color: AppTheme.primary.withValues(alpha: 100 / 255),
               ),
             ),
             const SizedBox(height: 24),
@@ -976,9 +976,9 @@ class _AboutButton extends StatelessWidget {
           height: 34,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withValues(alpha: 20 / 255),
+            color: AppTheme.primary.withValues(alpha: 20 / 255),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 55 / 255)),
+            border: Border.all(color: AppTheme.primary.withValues(alpha: 55 / 255)),
           ),
           child: const Row(
             mainAxisSize: MainAxisSize.min,
@@ -986,7 +986,7 @@ class _AboutButton extends StatelessWidget {
               Icon(
                 Icons.info_outline_rounded,
                 size: 16,
-                color: AppTheme.primaryColor,
+                color: AppTheme.primary,
               ),
               SizedBox(width: 6),
               Text(
@@ -994,7 +994,7 @@ class _AboutButton extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.primaryColor,
+                  color: AppTheme.primary,
                 ),
               ),
             ],
@@ -1036,7 +1036,7 @@ class _AboutInfoPanel extends StatelessWidget {
               fontSize: 12,
               fontWeight: FontWeight.w700,
               color:
-                  isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                  isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
             ),
           ),
           const SizedBox(height: 4),
@@ -1048,7 +1048,7 @@ class _AboutInfoPanel extends StatelessWidget {
               color: accent
                   ? AppTheme.accentColor
                   : (isDark
-                      ? AppTheme.darkTextSecondary
+                      ? AppTheme.textSecondary
                       : AppTheme.lightTextSecondary),
             ),
           ),

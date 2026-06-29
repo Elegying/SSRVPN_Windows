@@ -2,18 +2,17 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
-/// 连接按钮 — 高端大气设计，带动画光环
+/// Premium Connection Button
 class ConnectionButton extends StatefulWidget {
   final bool isConnected;
   final bool isConnecting;
   final VoidCallback? onTap;
 
-  const ConnectionButton({
-    super.key,
-    required this.isConnected,
-    this.isConnecting = false,
-    this.onTap,
-  });
+  const ConnectionButton(
+      {super.key,
+      required this.isConnected,
+      this.isConnecting = false,
+      this.onTap});
 
   @override
   State<ConnectionButton> createState() => _ConnectionButtonState();
@@ -21,21 +20,20 @@ class ConnectionButton extends StatefulWidget {
 
 class _ConnectionButtonState extends State<ConnectionButton>
     with TickerProviderStateMixin {
-  late AnimationController _pulseController;
-  late AnimationController _ringController;
+  late AnimationController _pulseCtrl;
+  late AnimationController _ringCtrl;
+  late AnimationController _breatheCtrl;
 
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    );
-    _ringController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-    );
-    _syncAnimations();
+    _pulseCtrl =
+        AnimationController(vsync: this, duration: const Duration(seconds: 2));
+    _ringCtrl =
+        AnimationController(vsync: this, duration: const Duration(seconds: 4));
+    _breatheCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 3500));
+    _sync();
   }
 
   @override
@@ -43,83 +41,74 @@ class _ConnectionButtonState extends State<ConnectionButton>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isConnected != widget.isConnected ||
         oldWidget.isConnecting != widget.isConnecting) {
-      _syncAnimations();
+      _sync();
     }
   }
 
-  /// 仅在连接/连接中状态跑动画；空闲时画面是静态的，停掉避免每帧重绘耗电
-  void _syncAnimations() {
+  void _sync() {
     if (widget.isConnected || widget.isConnecting) {
-      if (!_pulseController.isAnimating) _pulseController.repeat();
-      if (!_ringController.isAnimating) _ringController.repeat();
+      if (!_pulseCtrl.isAnimating) _pulseCtrl.repeat();
+      if (!_ringCtrl.isAnimating) _ringCtrl.repeat();
+      if (!_breatheCtrl.isAnimating) _breatheCtrl.repeat();
     } else {
-      _pulseController.stop();
-      _ringController.stop();
+      _pulseCtrl.stop();
+      _ringCtrl.stop();
+      _breatheCtrl.stop();
     }
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
-    _ringController.dispose();
+    _pulseCtrl.dispose();
+    _ringCtrl.dispose();
+    _breatheCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return GestureDetector(
       onTap: widget.isConnecting ? null : widget.onTap,
       child: SizedBox(
-        width: 120,
-        height: 120,
+        width: 140,
+        height: 140,
         child: AnimatedBuilder(
-          animation: Listenable.merge([_pulseController, _ringController]),
+          animation: Listenable.merge([_pulseCtrl, _ringCtrl, _breatheCtrl]),
           builder: (context, child) {
             return CustomPaint(
-              painter: _ConnectionButtonPainter(
-                isConnected: widget.isConnected,
-                isConnecting: widget.isConnecting,
-                pulseValue: _pulseController.value,
-                ringValue: _ringController.value,
-                isDark: isDark,
+              painter: _Painter(
+                connected: widget.isConnected,
+                connecting: widget.isConnecting,
+                pulse: _pulseCtrl.value,
+                ring: _ringCtrl.value,
+                breathe: _breatheCtrl.value,
               ),
               child: Center(
                 child: widget.isConnecting
                     ? const SizedBox(
-                        width: 32,
-                        height: 32,
+                        width: 36,
+                        height: 36,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Colors.white,
-                        ),
-                      )
+                            strokeWidth: 2.5, color: Colors.white))
                     : Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.power_settings_new_rounded,
-                            color: Colors.white,
-                            size: 32,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withValues(alpha: 60 / 255),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            widget.isConnected ? '断开' : '连接',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 220 / 255),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 1,
-                            ),
-                          ),
+                          Icon(Icons.power_settings_new_rounded,
+                              color: Colors.white,
+                              size: 36,
+                              shadows: [
+                                Shadow(
+                                    color: Colors.black.withValues(alpha: 0.3),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 2))
+                              ]),
+                          const SizedBox(height: 10),
+                          Text(widget.isConnected ? '断开' : '连接',
+                              style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 3)),
                         ],
                       ),
               ),
@@ -131,173 +120,147 @@ class _ConnectionButtonState extends State<ConnectionButton>
   }
 }
 
-class _ConnectionButtonPainter extends CustomPainter {
-  final bool isConnected;
-  final bool isConnecting;
-  final double pulseValue;
-  final double ringValue;
-  final bool isDark;
-  Size _size = Size.zero;
+class _Painter extends CustomPainter {
+  _Painter(
+      {required this.connected,
+      required this.connecting,
+      required this.pulse,
+      required this.ring,
+      required this.breathe});
 
-  _ConnectionButtonPainter({
-    required this.isConnected,
-    required this.isConnecting,
-    required this.pulseValue,
-    required this.ringValue,
-    required this.isDark,
-  });
+  final bool connected;
+  final bool connecting;
+  final double pulse;
+  final double ring;
+  final double breathe;
+  Size _size = Size.zero;
 
   @override
   void paint(Canvas canvas, Size size) {
     _size = size;
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.shortestSide / 2;
-
-    // 1. 外层光环（连接时脉冲扩散）
-    if (isConnected || isConnecting) {
-      _drawPulseRings(canvas, center, radius);
-    }
-
-    // 2. 主按钮背景
-    _drawMainButton(canvas, center, radius);
-
-    // 3. 旋转光环
-    if (isConnected) {
-      _drawRotatingRing(canvas, center, radius);
-    }
-
-    // 4. 玻璃高光
-    _drawGlassHighlight(canvas, center, radius);
+    final c = Offset(size.width / 2, size.height / 2);
+    final r = size.shortestSide / 2;
+    if (connected || connecting) _drawPulse(canvas, c, r);
+    _drawCore(canvas, c, r);
+    if (connected) _drawRing(canvas, c, r);
+    _drawHighlight(canvas, c, r);
   }
 
-  void _drawPulseRings(Canvas canvas, Offset center, double radius) {
-    for (int i = 0; i < 3; i++) {
-      final t = (pulseValue + i / 3) % 1.0;
-      final expandRadius = radius * (1.0 + t * 0.5);
-      final alpha = ((1.0 - t) * (isConnected ? 50 : 25)).toInt();
-
-      final color = isConnected
-          ? AppTheme.successColor.withValues(alpha: (alpha) / 255)
-          : AppTheme.primaryColor.withValues(alpha: (alpha) / 255);
-
+  void _drawPulse(Canvas canvas, Offset c, double r) {
+    for (int i = 0; i < 4; i++) {
+      final t = (pulse + i / 4) % 1.0;
+      final rr = r * (0.85 + t * 0.8);
+      final a = ((1.0 - t) * (connected ? 0.45 : 0.2)).clamp(0.0, 1.0);
       canvas.drawCircle(
-        center,
-        expandRadius,
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5,
-      );
+          c,
+          rr,
+          Paint()
+            ..color = (connected ? AppTheme.success : AppTheme.primary)
+                .withValues(alpha: a)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2);
     }
   }
 
-  void _drawMainButton(Canvas canvas, Offset center, double radius) {
-    final buttonRadius = radius * 0.65;
-
-    // 主渐变
-    final gradient = isConnected
-        ? const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF10B981), Color(0xFF059669)],
-          )
-        : const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF6366F1), Color(0xFF4F46E5)],
-          );
-
-    final rect = Rect.fromCircle(center: center, radius: buttonRadius);
-
-    // 阴影
-    final shadowColor = isConnected
-        ? AppTheme.successColor.withValues(alpha: 80 / 255)
-        : AppTheme.primaryColor.withValues(alpha: 80 / 255);
+  void _drawCore(Canvas canvas, Offset c, double r) {
+    final br = r * 0.58;
+    final scale = 1.0 + (connected ? 0.025 * sin(breathe * 2 * pi) : 0);
+    final ar = br * scale;
+    final colors = connected
+        ? [AppTheme.success, AppTheme.successMuted]
+        : [AppTheme.primary, AppTheme.primaryMuted];
+    final rect = Rect.fromCircle(center: c, radius: ar);
     canvas.drawCircle(
-      center + const Offset(0, 4),
-      buttonRadius,
-      Paint()
-        ..color = shadowColor
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20),
-    );
-
-    // 主圆
+        c + const Offset(0, 2),
+        ar + 10,
+        Paint()
+          ..color = (connected ? AppTheme.success : AppTheme.primary)
+              .withValues(alpha: 0.35)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 28));
     canvas.drawCircle(
-      center,
-      buttonRadius,
-      Paint()..shader = gradient.createShader(rect),
-    );
-
-    // 边框高光
+        c + const Offset(0, 3),
+        ar,
+        Paint()
+          ..color = Colors.black.withValues(alpha: 0.4)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14));
     canvas.drawCircle(
-      center,
-      buttonRadius,
-      Paint()
-        ..color = Colors.white.withValues(alpha: 30 / 255)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
-    );
+        c,
+        ar,
+        Paint()
+          ..shader = LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: colors)
+              .createShader(rect));
+    canvas.drawCircle(
+        c,
+        ar,
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.2)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2);
   }
 
-  void _drawRotatingRing(Canvas canvas, Offset center, double radius) {
-    final ringRadius = radius * 0.75;
-    const sweepAngle = pi * 0.6;
-    final startAngle = ringValue * 2 * pi;
-
-    final rect = Rect.fromCircle(center: center, radius: ringRadius);
-
+  void _drawRing(Canvas canvas, Offset c, double r) {
+    final rr = r * 0.68;
+    const sweep = pi * 0.45;
+    final start = ring * 2 * pi;
+    final rect = Rect.fromCircle(center: c, radius: rr);
     canvas.drawArc(
-      rect,
-      startAngle,
-      sweepAngle,
-      false,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
-        ..shader = SweepGradient(
-          startAngle: startAngle,
-          endAngle: startAngle + sweepAngle,
-          colors: [
-            Colors.transparent,
-            AppTheme.successLight.withValues(alpha: 150 / 255),
-            Colors.transparent,
-          ],
-        ).createShader(rect),
-    );
+        rect,
+        start,
+        sweep,
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.8
+          ..shader = SweepGradient(
+              startAngle: start,
+              endAngle: start + sweep,
+              colors: [
+                Colors.transparent,
+                AppTheme.success.withValues(alpha: 0.7),
+                Colors.transparent
+              ]).createShader(rect));
+    canvas.drawArc(
+        rect,
+        start + pi,
+        sweep,
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2
+          ..shader = SweepGradient(
+              startAngle: start + pi,
+              endAngle: start + pi + sweep,
+              colors: [
+                Colors.transparent,
+                AppTheme.success.withValues(alpha: 0.35),
+                Colors.transparent
+              ]).createShader(rect));
   }
 
-  void _drawGlassHighlight(Canvas canvas, Offset center, double radius) {
-    final buttonRadius = radius * 0.65;
-
-    // 顶部半月形高光
-    final highlightPath = Path()
-      ..addArc(
-        Rect.fromCircle(center: center, radius: buttonRadius),
-        -pi * 0.85,
-        pi * 0.85,
-      );
-
+  void _drawHighlight(Canvas canvas, Offset c, double r) {
+    final br = r * 0.58;
+    final path = Path()
+      ..addArc(Rect.fromCircle(center: c, radius: br), -pi * 0.85, pi * 0.85);
     canvas.save();
     canvas.clipPath(
-      Path()..addRect(Rect.fromLTWH(0, 0, _size.width, _size.height / 2)),
-    );
-
+        Path()..addRect(Rect.fromLTWH(0, 0, _size.width, _size.height / 2)));
     canvas.drawPath(
-      highlightPath,
-      Paint()
-        ..color = Colors.white.withValues(alpha: (isDark ? 20 : 40) / 255)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = buttonRadius * 0.15,
-    );
-
+        path,
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.12)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = br * 0.1);
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant _ConnectionButtonPainter oldDelegate) {
-    return oldDelegate.isConnected != isConnected ||
-        oldDelegate.isConnecting != isConnecting ||
-        oldDelegate.pulseValue != pulseValue ||
-        oldDelegate.ringValue != ringValue;
-  }
+  bool shouldRepaint(covariant _Painter old) =>
+      old.connected != connected ||
+      old.connecting != connecting ||
+      old.pulse != pulse ||
+      old.ring != ring ||
+      old.breathe != breathe;
 }

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -64,8 +65,10 @@ proxies:
       expect(parsed['mode'], 'global');
       expect(parsed['secret'], "secret'quoted");
       expect(
-          parsed['proxy-groups'][1]['url'], 'https://example.com/generate_204');
+          parsed['proxy-groups'][2]['url'], 'https://example.com/generate_204');
       expect(parsed['proxies'], hasLength(1));
+      expect(parsed['proxy-groups'][1]['name'], 'GLOBAL');
+      expect(parsed['proxy-groups'][1]['proxies'], ['PROXY', 'Node One']);
     });
 
     test('puts the remembered node first in the PROXY group', () {
@@ -91,7 +94,37 @@ proxies:
 
       final parsed = loadYaml(config) as YamlMap;
       expect(parsed['proxy-groups'][0]['proxies'], ['Second', 'First']);
-      expect(parsed['proxy-groups'][1]['proxies'], ['First', 'Second']);
+      expect(parsed['proxy-groups'][1]['proxies'], [
+        'PROXY',
+        'Second',
+        'First',
+      ]);
+      expect(parsed['proxy-groups'][2]['proxies'], ['First', 'Second']);
+    });
+
+    test('writes TUN enable exactly from settings', () {
+      const rawYaml = '''
+proxies:
+  - name: First
+    type: ss
+    server: 127.0.0.1
+    port: 1001
+    cipher: aes-128-gcm
+    password: test
+''';
+
+      final disabled = loadYaml(
+        ClashService().generateClashConfig(rawYaml, AppSettings()),
+      ) as YamlMap;
+      final enabled = loadYaml(
+        ClashService().generateClashConfig(
+          rawYaml,
+          AppSettings(enableTun: true),
+        ),
+      ) as YamlMap;
+
+      expect(disabled['tun']['enable'], isFalse);
+      expect(enabled['tun']['enable'], isTrue);
     });
 
     test('writes custom force proxy rules before direct rules', () {
@@ -117,7 +150,10 @@ proxies:
       final rules = (parsed['rules'] as YamlList).cast<String>();
       expect(rules[0], 'DOMAIN-SUFFIX,blocked.example,PROXY');
       expect(rules[1], 'DOMAIN-SUFFIX,youtube.com,PROXY');
-      expect(rules[2], 'DOMAIN-SUFFIX,cn,DIRECT');
+      expect(rules[2], 'DOMAIN,api.country.is,SSRVPN-GEO');
+      expect(rules[3], 'DOMAIN,ipinfo.io,SSRVPN-GEO');
+      expect(rules[4], 'DOMAIN,ifconfig.co,SSRVPN-GEO');
+      expect(rules[5], 'DOMAIN-SUFFIX,cn,DIRECT');
     });
 
     test('selects temporary ports when preferred ports are occupied', () async {
@@ -151,5 +187,54 @@ proxies:
       'port': '443',
     });
     expect(node.port, 443);
+  });
+
+  test('global node switch updates PROXY and GLOBAL groups', () async {
+    final requests = <Map<String, String>>[];
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final subscription = server.listen((request) async {
+      final body = await utf8.decoder.bind(request).join();
+      requests.add({
+        'method': request.method,
+        'path': request.uri.path,
+        'auth': request.headers.value(HttpHeaders.authorizationHeader) ?? '',
+        'body': body,
+      });
+      request.response.statusCode = HttpStatus.noContent;
+      await request.response.close();
+    });
+
+    try {
+      final service = ClashService()
+        ..updateSettings(
+          AppSettings(
+            apiPort: server.port,
+            apiSecret: 'secret',
+            proxyMode: ProxyMode.global,
+          ),
+        );
+
+      expect(await service.switchSelectedProxy('First'), isTrue);
+    } finally {
+      await subscription.cancel();
+      await server.close(force: true);
+    }
+
+    expect(requests.map((request) => request['method']), [
+      'PUT',
+      'PUT',
+      'DELETE',
+    ]);
+    expect(requests.map((request) => request['path']), [
+      '/proxies/PROXY',
+      '/proxies/GLOBAL',
+      '/connections',
+    ]);
+    expect(
+      requests.map((request) => request['auth']).toSet(),
+      {'Bearer secret'},
+    );
+    expect(jsonDecode(requests[0]['body']!)['name'], 'First');
+    expect(jsonDecode(requests[1]['body']!)['name'], 'PROXY');
   });
 }

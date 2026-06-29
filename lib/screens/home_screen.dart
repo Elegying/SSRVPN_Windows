@@ -1,17 +1,22 @@
+// ignore_for_file: prefer_const_constructors
+
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:ssrvpn_shared/models/proxy_node.dart';
+import 'package:ssrvpn_shared/utils/private_node_latency_policy.dart';
 import '../models/app_settings.dart';
 import '../services/clash_service.dart';
+import '../services/ip_geo_service.dart';
 import '../services/subscription_service.dart';
 import '../services/settings_service.dart';
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/connection_button.dart';
 import '../widgets/glass_container.dart';
+import '../widgets/liquid_glass.dart';
 import 'node_edit_screen.dart';
 
 /// 主屏幕 — Windows 桌面优化
@@ -88,13 +93,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       final success = await clashService.start();
       if (success && preferredNode != null) {
         final switched =
-            await clashService.switchProxy('PROXY', preferredNode.name);
+            await clashService.switchSelectedProxy(preferredNode.name);
         if (switched) await _rememberSelectedNode(preferredNode);
       }
+      final connectivityWarning =
+          success ? await clashService.verifyUserConnectivity() : null;
       if (mounted && !_disposed) {
         setState(() {
           _isConnected = success;
           _isConnecting = false;
+          _errorMessage = connectivityWarning;
           _nodes = nodes;
           _selectedNode = success ? preferredNode : null;
         });
@@ -204,9 +212,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       builder: (dialogContext) {
         final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
         final titleColor =
-            isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
+            isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
         final subtitleColor =
-            isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
+            isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
         return StatefulBuilder(
           builder: (builderContext, setDialogState) {
@@ -263,7 +271,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   SnackBar(
                     behavior: SnackBarBehavior.floating,
                     content: Text('节点已更新，获取到 ${nodes.length} 个节点'),
-                    backgroundColor: AppTheme.successColor,
+                    backgroundColor: AppTheme.success,
                   ),
                 );
               } catch (e) {
@@ -295,12 +303,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: AppTheme.primaryColor.withValues(alpha: 22 / 255),
+                              color:
+                                  AppTheme.primary.withValues(alpha: 22 / 255),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: const Icon(
                               Icons.rss_feed_rounded,
-                              color: AppTheme.primaryColor,
+                              color: AppTheme.primary,
                               size: 22,
                             ),
                           ),
@@ -340,7 +349,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
                               color: isDark
-                                  ? AppTheme.darkBorder
+                                  ? AppTheme.border
                                   : AppTheme.lightBorder,
                             ),
                           ),
@@ -366,7 +375,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             child: ElevatedButton(
                               onPressed: isSubmitting ? null : submit,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.primaryColor,
+                                backgroundColor: AppTheme.primary,
                                 foregroundColor: Colors.white,
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 12),
@@ -437,17 +446,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     clashService.updateSettings(settingsService.settings);
 
     if (!mounted || _disposed) return;
-    setState(() {
-      _isConnecting = false;
-      _isConnected = false;
-      _selectedNode = null;
-      _latencies.clear();
-    });
 
     if (wasConnected) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('网络设置已更新，请重新连接')),
-      );
+      await _reloadConfig();
+    } else {
+      setState(() {
+        _isConnecting = false;
+      });
     }
   }
 
@@ -467,9 +472,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       builder: (dialogContext) {
         final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
         final titleColor =
-            isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
+            isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
         final subtitleColor =
-            isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
+            isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
         return StatefulBuilder(
           builder: (builderContext, setDialogState) {
@@ -512,7 +517,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               decoration: BoxDecoration(
                                 gradient: const LinearGradient(
                                   colors: [
-                                    AppTheme.primaryColor,
+                                    AppTheme.primary,
                                     AppTheme.accentColor,
                                   ],
                                 ),
@@ -583,7 +588,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           Text(
                             errorText!,
                             style: const TextStyle(
-                              color: AppTheme.errorColor,
+                              color: AppTheme.error,
                               fontSize: 12,
                             ),
                           ),
@@ -603,7 +608,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               child: ElevatedButton(
                                 onPressed: submit,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppTheme.primaryColor,
+                                  backgroundColor: AppTheme.primary,
                                   foregroundColor: Colors.white,
                                   padding:
                                       const EdgeInsets.symmetric(vertical: 12),
@@ -672,7 +677,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               : '强制代理网站已保存',
         ),
         backgroundColor:
-            shouldReload && !reloadSucceeded ? AppTheme.warningColor : null,
+            shouldReload && !reloadSucceeded ? AppTheme.warning : null,
         duration: const Duration(seconds: 2),
       ),
     );
@@ -730,12 +735,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         if (success) {
           if (autoSelect != null) {
             final switched =
-                await clashService.switchProxy('PROXY', autoSelect.name);
+                await clashService.switchSelectedProxy(autoSelect.name);
             if (switched) await _rememberSelectedNode(autoSelect);
           }
+          final connectivityWarning =
+              await clashService.verifyUserConnectivity();
           setState(() {
             _isConnected = true;
             _isConnecting = false;
+            _errorMessage = connectivityWarning;
             _nodes = nodes;
             _selectedNode = autoSelect;
           });
@@ -788,11 +796,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     setState(() => _testingNodeName = nodeName);
     final clashService = context.read<ClashService>();
     final settings = context.read<SettingsService>().settings;
-    var latency = await clashService.testLatency(server, port,
-        timeoutMs: settings.latencyTestTimeout);
-    if (nodeName.contains('私家车')) {
-      latency = math.Random().nextInt(16) + 24;
-    }
+    final measuredLatency = await clashService.testLatency(
+      server,
+      port,
+      timeoutMs: settings.latencyTestTimeout,
+    );
+    final latency = PrivateNodeLatencyPolicy.displayLatencyForNode(
+      nodeName,
+      measuredLatency,
+      random: math.Random(),
+    );
     if (mounted && !_disposed) {
       setState(() {
         _latencies[nodeName] = latency;
@@ -818,7 +831,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       return;
     }
     final ok =
-        await context.read<ClashService>().switchProxy('PROXY', node.name);
+        await context.read<ClashService>().switchSelectedProxy(node.name);
     if (ok) {
       await _rememberSelectedNode(node);
       if (mounted) setState(() => _selectedNode = node);
@@ -922,72 +935,82 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: isDark ? const Color(0xFF1A1D26) : Colors.white,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.88),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(colors: [
-                          AppTheme.primaryColor,
-                          AppTheme.accentColor
-                        ]),
-                        borderRadius: BorderRadius.circular(10),
+        child: GlassContainer(
+          borderRadius: 16,
+          enablePress: false,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: (MediaQuery.of(ctx).size.width * 0.88)
+                  .clamp(
+                    280.0,
+                    420.0,
+                  )
+                  .toDouble(),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                              colors: [AppTheme.primary, AppTheme.accentColor]),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.menu_book_rounded,
+                            color: Colors.white, size: 20),
                       ),
-                      child: const Icon(Icons.menu_book_rounded,
-                          color: Colors.white, size: 20),
-                    ),
-                    const SizedBox(width: 12),
-                    Text('使用教程',
-                        style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: isDark
-                                ? AppTheme.darkTextPrimary
-                                : AppTheme.lightTextPrimary)),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                const _TutorialStep(step: '1', text: '点击底部「订阅」标签，进入订阅管理页面'),
-                const SizedBox(height: 12),
-                const _TutorialStep(step: '2', text: '在输入框中粘贴订阅链接，点击「添加」'),
-                const SizedBox(height: 12),
-                const _TutorialStep(step: '3', text: '添加成功后点击「全部刷新」，等待节点加载完成'),
-                const SizedBox(height: 12),
-                const _TutorialStep(step: '4', text: '返回主页，点击连接按钮即可使用'),
-                const SizedBox(height: 12),
-                const _TutorialStep(
-                    step: '5', text: '系统代理模式无需管理员权限，TUN 模式需以管理员身份运行'),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                      backgroundColor:
-                          AppTheme.primaryColor.withValues(alpha: (isDark ? 25 : 15) / 255),
-                    ),
-                    child: const Text('知道了',
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.primaryColor)),
+                      const SizedBox(width: 12),
+                      Text('使用教程',
+                          style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: isDark
+                                  ? AppTheme.textPrimary
+                                  : AppTheme.lightTextPrimary)),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 20),
+                  const _TutorialStep(step: '1', text: '点击底部「订阅」标签，进入订阅管理页面'),
+                  const SizedBox(height: 12),
+                  const _TutorialStep(step: '2', text: '在输入框中粘贴订阅链接，点击「添加」'),
+                  const SizedBox(height: 12),
+                  const _TutorialStep(
+                      step: '3', text: '添加成功后点击「全部刷新」，等待节点加载完成'),
+                  const SizedBox(height: 12),
+                  const _TutorialStep(step: '4', text: '返回主页，点击连接按钮即可使用'),
+                  const SizedBox(height: 12),
+                  const _TutorialStep(
+                      step: '5', text: '系统代理模式无需管理员权限，TUN 模式需以管理员身份运行'),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        backgroundColor: AppTheme.primary
+                            .withValues(alpha: (isDark ? 25 : 15) / 255),
+                      ),
+                      child: const Text('知道了',
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primary)),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -1015,17 +1038,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 Row(
                   children: [
                     const Icon(Icons.bug_report,
-                        size: 18, color: AppTheme.warningColor),
+                        size: 18, color: AppTheme.warning),
                     const SizedBox(width: 8),
                     const Text('运行日志',
                         style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: AppTheme.darkTextPrimary)),
+                            color: AppTheme.textPrimary)),
                     const Spacer(),
                     IconButton(
                       icon: const Icon(Icons.copy,
-                          size: 18, color: AppTheme.darkTextSecondary),
+                          size: 18, color: AppTheme.textSecondary),
                       onPressed: () async {
                         await Clipboard.setData(
                             ClipboardData(text: clashService.recentLogs));
@@ -1039,12 +1062,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                     IconButton(
                       icon: const Icon(Icons.close,
-                          size: 18, color: AppTheme.darkTextSecondary),
+                          size: 18, color: AppTheme.textSecondary),
                       onPressed: () => Navigator.pop(ctx),
                     ),
                   ],
                 ),
-                const Divider(color: AppTheme.darkBorder),
+                const Divider(color: AppTheme.border),
                 Expanded(
                   child: SingleChildScrollView(
                     child: SelectableText(
@@ -1052,7 +1075,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       style: const TextStyle(
                           fontSize: 12,
                           fontFamily: 'Consolas',
-                          color: AppTheme.darkTextSecondary,
+                          color: AppTheme.textSecondary,
                           height: 1.6),
                     ),
                   ),
@@ -1069,24 +1092,84 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsService>().settings;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor =
-        isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
+    final textColor = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final subColor =
-        isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary;
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
     final subService = context.watch<SubscriptionService>();
     _onSubscriptionChanged(subService);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildTopBar(isDark, textColor),
-            _buildStatusBar(isDark, textColor, subColor, settings),
-            Expanded(child: _buildNodeList(textColor, subColor, isDark)),
-          ],
-        ),
+      body: _buildLiquidDashboard(isDark, textColor, subColor, settings),
+    );
+  }
+
+  Widget _buildLiquidDashboard(
+    bool isDark,
+    Color textColor,
+    Color subColor,
+    AppSettings settings,
+  ) {
+    return SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 880;
+          final padding = wide
+              ? const EdgeInsets.fromLTRB(24, 18, 24, 24)
+              : const EdgeInsets.fromLTRB(0, 0, 0, 0);
+
+          if (!wide) {
+            return Column(
+              children: [
+                _buildTopBar(isDark, textColor),
+                _buildStatusBar(isDark, textColor, subColor, settings),
+                Expanded(child: _buildNodeList(textColor, subColor, isDark)),
+              ],
+            );
+          }
+
+          return Padding(
+            padding: padding,
+            child: Column(
+              children: [
+                _buildTopBar(isDark, textColor),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        width: 420,
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: _buildStatusBar(
+                            isDark,
+                            textColor,
+                            subColor,
+                            settings,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 18),
+                      Expanded(
+                        child: LiquidGlassContainer(
+                          blur: 30,
+                          opacity: isDark ? 0.045 : 0.5,
+                          borderRadius:
+                              const BorderRadius.all(Radius.circular(26)),
+                          padding: EdgeInsets.zero,
+                          borderOpacity: isDark ? 0.16 : 0.72,
+                          child: _buildNodeList(textColor, subColor, isDark),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -1097,108 +1180,127 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         final compact = constraints.maxWidth < 430;
         return Padding(
           padding:
-              EdgeInsets.fromLTRB(compact ? 16 : 24, 12, compact ? 16 : 24, 8),
+              EdgeInsets.fromLTRB(compact ? 20 : 28, 14, compact ? 20 : 28, 6),
           child: Row(
             children: [
+              // 品牌标识
               Container(
-                width: compact ? 34 : 36,
-                height: compact ? 34 : 36,
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                      colors: [AppTheme.primaryColor, AppTheme.accentColor]),
-                  borderRadius: BorderRadius.circular(10),
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppTheme.primary, AppTheme.accentColor],
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primary.withValues(alpha: 40 / 255),
+                      blurRadius: 12,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: const Icon(
                   Icons.shield_rounded,
                   color: Colors.white,
-                  size: 20,
+                  size: 18,
                 ),
               ),
-              const SizedBox(width: 12),
-              Flexible(
-                child: Text('SSRVPN',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: compact ? 18 : 20,
-                        fontWeight: FontWeight.w700,
-                        color: textColor,
-                        letterSpacing: 0.5)),
-              ),
+              const SizedBox(width: 10),
+              Text('SSRVPN',
+                  style: TextStyle(
+                      fontSize: compact ? 17 : 19,
+                      fontWeight: FontWeight.w800,
+                      color: textColor,
+                      letterSpacing: 0)),
               if (!compact) ...[
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 20 / 255),
-                    borderRadius: BorderRadius.circular(6),
+                    color: AppTheme.primary.withValues(alpha: 15 / 255),
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(
+                      color: AppTheme.primary.withValues(alpha: 30 / 255),
+                    ),
                   ),
                   child: const Text('Windows',
                       style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 9,
                           fontWeight: FontWeight.w600,
-                          color: AppTheme.primaryColor)),
+                          letterSpacing: 0.5,
+                          color: AppTheme.primary)),
                 ),
               ],
               const Spacer(),
+              // 右侧操作
               if (_isConnected && !compact)
                 Container(
+                  margin: const EdgeInsets.only(right: 8),
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: AppTheme.successColor.withValues(alpha: 20 / 255),
+                    color: AppTheme.success.withValues(alpha: 15 / 255),
                     borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppTheme.success.withValues(alpha: 30 / 255),
+                    ),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.check_circle,
-                          size: 14, color: AppTheme.successColor),
+                          size: 13, color: AppTheme.success),
                       SizedBox(width: 4),
                       Text('已连接',
                           style: TextStyle(
-                              fontSize: 12,
-                              color: AppTheme.successColor,
+                              fontSize: 11,
+                              color: AppTheme.success,
                               fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),
-              if (_isConnected && !compact) const SizedBox(width: 8),
               Tooltip(
                 message: '使用教程',
                 child: GestureDetector(
                   onTap: () => _showTutorial(context),
                   child: Container(
+                    height: 38,
                     padding: EdgeInsets.symmetric(
-                      horizontal: compact ? 10 : 12,
-                      vertical: 7,
+                      horizontal: compact ? 11 : 14,
                     ),
                     decoration: BoxDecoration(
-                      color: isDark ? AppTheme.darkCard : AppTheme.lightBg,
-                      borderRadius: BorderRadius.circular(8),
+                      gradient: const LinearGradient(
+                        colors: [AppTheme.primary, AppTheme.accentColor],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                          color: isDark
-                              ? AppTheme.darkBorder
-                              : AppTheme.lightBorder),
+                        color: Colors.white.withValues(alpha: 0.26),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.primary.withValues(alpha: 0.24),
+                          blurRadius: 18,
+                          spreadRadius: -8,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.menu_book_rounded,
-                            size: 14,
-                            color: isDark
-                                ? AppTheme.darkTextSecondary
-                                : AppTheme.lightTextSecondary),
+                        const Icon(Icons.menu_book_rounded,
+                            size: 16, color: Colors.white),
                         if (!compact) ...[
-                          const SizedBox(width: 4),
-                          Text('使用教程',
+                          const SizedBox(width: 7),
+                          Text('教程',
                               style: TextStyle(
                                   fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: isDark
-                                      ? AppTheme.darkTextSecondary
-                                      : AppTheme.lightTextSecondary)),
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white)),
                         ],
                       ],
                     ),
@@ -1219,33 +1321,37 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         final compact = constraints.maxWidth < 430;
         return Padding(
           padding:
-              EdgeInsets.fromLTRB(compact ? 16 : 24, 8, compact ? 16 : 24, 8),
+              EdgeInsets.fromLTRB(compact ? 20 : 28, 10, compact ? 20 : 28, 10),
           child: AnimatedBuilder(
             animation: _glowController,
             builder: (context, child) {
               final glowIntensity = _isConnected
-                  ? 0.25 + 0.15 * math.sin(_glowController.value * 2 * math.pi)
+                  ? 0.2 + 0.12 * math.sin(_glowController.value * 2 * math.pi)
                   : 0.0;
-              final glowColor = AppTheme.successColor.withAlpha(
+              final glowColor = AppTheme.success.withAlpha(
                 (glowIntensity * 255).toInt(),
               );
               return Container(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(20),
                   boxShadow: _isConnected
                       ? [
                           BoxShadow(
                             color: glowColor,
-                            blurRadius: 20,
+                            blurRadius: 28,
                             spreadRadius: 2,
                           ),
                         ]
                       : [],
                 ),
-                child: GlassContainer(
-                  borderRadius: 18,
+                child: LiquidGlassContainer(
+                  blur: 34,
+                  opacity: isDark ? 0.055 : 0.58,
+                  borderRadius: const BorderRadius.all(Radius.circular(24)),
                   padding:
-                      const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+                      const EdgeInsets.symmetric(vertical: 28, horizontal: 24),
+                  borderOpacity: isDark ? 0.17 : 0.72,
+                  shadowOpacity: isDark ? 0.42 : 0.1,
                   child: Column(
                     children: [
                       Row(
@@ -1255,7 +1361,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             isConnecting: _isConnecting,
                             onTap: _handleConnectToggle,
                           ),
-                          const SizedBox(width: 18),
+                          const SizedBox(width: 20),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1282,7 +1388,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                       fontSize: 22,
                                       fontWeight: FontWeight.w700,
                                       color: _isConnected
-                                          ? AppTheme.successColor
+                                          ? AppTheme.success
                                           : textColor,
                                     ),
                                     maxLines: 1,
@@ -1295,8 +1401,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 10, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color:
-                                          AppTheme.successColor.withValues(alpha: 15 / 255),
+                                      color: AppTheme.success
+                                          .withValues(alpha: 15 / 255),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
@@ -1313,10 +1419,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 12, vertical: 8),
                                     decoration: BoxDecoration(
-                                      color: AppTheme.errorColor.withValues(alpha: 15 / 255),
+                                      color: AppTheme.error
+                                          .withValues(alpha: 15 / 255),
                                       borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
-                                          color: AppTheme.errorColor
+                                          color: AppTheme.error
                                               .withValues(alpha: 40 / 255)),
                                     ),
                                     child: Column(
@@ -1328,13 +1435,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                           children: [
                                             const Icon(Icons.error_outline,
                                                 size: 14,
-                                                color: AppTheme.errorColor),
+                                                color: AppTheme.error),
                                             const SizedBox(width: 6),
                                             Expanded(
                                                 child: Text(_errorMessage!,
                                                     style: const TextStyle(
-                                                        color:
-                                                            AppTheme.errorColor,
+                                                        color: AppTheme.error,
                                                         fontSize: 12))),
                                           ],
                                         ),
@@ -1346,14 +1452,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                             children: [
                                               const Icon(Icons.bug_report,
                                                   size: 12,
-                                                  color: AppTheme.warningColor),
+                                                  color: AppTheme.warning),
                                               const SizedBox(width: 4),
                                               Text('查看日志',
                                                   style: TextStyle(
                                                       fontSize: 11,
-                                                      color: AppTheme
-                                                          .warningColor
-                                                          .withValues(alpha: 200 / 255),
+                                                      color: AppTheme.warning
+                                                          .withValues(
+                                                              alpha: 200 / 255),
                                                       decoration: TextDecoration
                                                           .underline)),
                                             ],
@@ -1389,12 +1495,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     AppSettings settings,
   ) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 5 / 255) : Colors.black.withValues(alpha: 5 / 255),
-        borderRadius: BorderRadius.circular(12),
+        color: isDark
+            ? Colors.white.withValues(alpha: 4 / 255)
+            : Colors.black.withValues(alpha: 4 / 255),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+          color: isDark ? AppTheme.border : AppTheme.lightBorder,
           width: 0.5,
         ),
       ),
@@ -1465,13 +1573,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   color: selected
-                      ? AppTheme.primaryColor.withValues(alpha: (isDark ? 28 : 18) / 255)
+                      ? AppTheme.primary
+                          .withValues(alpha: (isDark ? 28 : 18) / 255)
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: selected
-                        ? AppTheme.primaryColor.withValues(alpha: 120 / 255)
-                        : (isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+                        ? AppTheme.primary.withValues(alpha: 120 / 255)
+                        : (isDark ? AppTheme.border : AppTheme.lightBorder),
                   ),
                 ),
                 child: Row(
@@ -1479,7 +1588,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     Icon(
                       icon,
                       size: 18,
-                      color: selected ? AppTheme.primaryColor : subColor,
+                      color: selected ? AppTheme.primary : subColor,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -1492,7 +1601,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           height: 1.25,
                           fontWeight:
                               selected ? FontWeight.w700 : FontWeight.w500,
-                          color: selected ? AppTheme.primaryColor : textColor,
+                          color: selected ? AppTheme.primary : textColor,
                         ),
                       ),
                     ),
@@ -1502,7 +1611,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           ? Icons.check_circle_rounded
                           : Icons.radio_button_unchecked_rounded,
                       size: 18,
-                      color: selected ? AppTheme.primaryColor : subColor,
+                      color: selected ? AppTheme.primary : subColor,
                     ),
                   ],
                 ),
@@ -1554,7 +1663,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 width: 1,
                 height: 52,
                 margin: const EdgeInsets.symmetric(horizontal: 16),
-                color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+                color: isDark ? AppTheme.border : AppTheme.lightBorder,
               ),
               Expanded(child: tunControl),
             ],
@@ -1568,32 +1677,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+          padding: const EdgeInsets.fromLTRB(28, 10, 28, 8),
           child: Row(
             children: [
               Container(
-                  width: 4,
-                  height: 18,
+                  width: 3,
+                  height: 16,
                   decoration: BoxDecoration(
-                      color: AppTheme.primaryColor,
+                      color: AppTheme.primary,
                       borderRadius: BorderRadius.circular(2))),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Text('全部节点',
                   style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.w700,
                       color: textColor)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 20 / 255),
-                    borderRadius: BorderRadius.circular(8)),
+                    color: AppTheme.primary.withValues(alpha: 15 / 255),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppTheme.primary.withValues(alpha: 25 / 255),
+                    )),
                 child: Text('${_nodes.length}',
                     style: const TextStyle(
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: AppTheme.primaryColor)),
+                        color: AppTheme.primary)),
               ),
               const Spacer(),
               if (_isBatchTesting)
@@ -1601,7 +1713,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: AppTheme.primaryColor))
+                        strokeWidth: 2, color: AppTheme.primary))
               else if (_isConnected)
                 _SmallButton(
                     icon: Icons.speed,
@@ -1625,7 +1737,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 width: 32,
                 height: 32,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2.5, color: AppTheme.primaryColor)),
+                    strokeWidth: 2.5, color: AppTheme.primary)),
             const SizedBox(height: 16),
             Text('正在启动核心...', style: TextStyle(fontSize: 14, color: subColor)),
           ],
@@ -1642,10 +1754,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withValues(alpha: 10 / 255),
+                  color: AppTheme.primary.withValues(alpha: 10 / 255),
                   shape: BoxShape.circle),
               child: Icon(Icons.dns_outlined,
-                  size: 32, color: AppTheme.primaryColor.withValues(alpha: 100 / 255)),
+                  size: 32,
+                  color: AppTheme.primary.withValues(alpha: 100 / 255)),
             ),
             const SizedBox(height: 20),
             Text('暂无节点',
@@ -1662,7 +1775,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
       itemCount: _nodes.length,
       itemBuilder: (context, index) {
         final node = _nodes[index];
@@ -1711,10 +1824,11 @@ class _ForceProxyButton extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 168),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withValues(alpha: (isDark ? 24 : 16) / 255),
+            color: AppTheme.primary.withValues(alpha: (isDark ? 24 : 16) / 255),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: AppTheme.primaryColor.withValues(alpha: (isDark ? 70 : 55) / 255),
+              color:
+                  AppTheme.primary.withValues(alpha: (isDark ? 70 : 55) / 255),
             ),
           ),
           child: const Row(
@@ -1723,7 +1837,7 @@ class _ForceProxyButton extends StatelessWidget {
               Icon(
                 Icons.add_link_rounded,
                 size: 16,
-                color: AppTheme.primaryColor,
+                color: AppTheme.primary,
               ),
               SizedBox(width: 6),
               Flexible(
@@ -1735,7 +1849,7 @@ class _ForceProxyButton extends StatelessWidget {
                     fontSize: 12,
                     height: 1.2,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.primaryColor,
+                    color: AppTheme.primary,
                   ),
                 ),
               ),
@@ -1762,21 +1876,21 @@ class _SmallButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: isDark ? AppTheme.darkCard : AppTheme.lightBg,
+          color: isDark ? AppTheme.card : AppTheme.lightBg,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-              color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+              color: isDark ? AppTheme.border : AppTheme.lightBorder),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 14, color: AppTheme.primaryColor),
+            Icon(icon, size: 14, color: AppTheme.primary),
             const SizedBox(width: 4),
             Text(label,
                 style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: AppTheme.primaryColor)),
+                    color: AppTheme.primary)),
           ],
         ),
       ),
@@ -1815,130 +1929,602 @@ class _NodeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveTextColor = isTimeout ? textColor.withValues(alpha: 80 / 255) : textColor;
-    final effectiveSubColor = isTimeout ? subColor.withValues(alpha: 60 / 255) : subColor;
+    final effectiveTextColor =
+        isTimeout ? textColor.withValues(alpha: 80 / 255) : textColor;
+    final effectiveSubColor =
+        isTimeout ? subColor.withValues(alpha: 60 / 255) : subColor;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: GestureDetector(
-        onTap: isTimeout ? null : onTap,
-        onSecondaryTapDown: onSecondaryTapDown,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            color: isSelected
-                ? (isDark
-                    ? AppTheme.successColor.withValues(alpha: 15 / 255)
-                    : AppTheme.successColor.withValues(alpha: 10 / 255))
-                : null,
-            border: Border.all(
+    return _HoverableNodeCard(
+      enabled: !isTimeout,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: GestureDetector(
+          onTap: isTimeout ? null : onTap,
+          onSecondaryTapDown: onSecondaryTapDown,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
               color: isSelected
-                  ? AppTheme.successColor.withValues(alpha: 80 / 255)
-                  : isDark
-                      ? AppTheme.darkBorder
-                      : AppTheme.lightBorder,
-              width: isSelected ? 1.5 : 1,
+                  ? (isDark
+                      ? AppTheme.success.withValues(alpha: 15 / 255)
+                      : AppTheme.success.withValues(alpha: 10 / 255))
+                  : null,
+              border: Border.all(
+                color: isSelected
+                    ? AppTheme.success.withValues(alpha: 80 / 255)
+                    : isDark
+                        ? AppTheme.border
+                        : AppTheme.lightBorder,
+                width: isSelected ? 1.5 : 1,
+              ),
             ),
-          ),
-          child: Opacity(
-            opacity: isTimeout ? 0.45 : 1.0,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              child: Row(
-                children: [
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppTheme.successColor
-                          : (isDark ? AppTheme.darkCard : AppTheme.lightBg),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                          color: isSelected
-                              ? AppTheme.successColor
-                              : (isDark
-                                  ? AppTheme.darkBorderLight
-                                  : AppTheme.lightBorder)),
+            child: Opacity(
+              opacity: isTimeout ? 0.45 : 1.0,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: Row(
+                  children: [
+                    _NodeFlagBadge(
+                      node: node,
+                      selected: isSelected,
+                      timeout: isTimeout,
+                      isDark: isDark,
+                      isConnected: isConnected,
                     ),
-                    child: isSelected
-                        ? const Icon(Icons.check_rounded,
-                            size: 18, color: Colors.white)
-                        : isTimeout
-                            ? Icon(Icons.close_rounded,
-                                size: 16,
-                                color: AppTheme.errorColor.withValues(alpha: 150 / 255))
-                            : Center(
-                                child: Text(node.name.characters.first,
-                                    style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppTheme.primaryColor))),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(node.name,
-                            style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: isSelected
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
-                                color: isSelected
-                                    ? AppTheme.successColor
-                                    : effectiveTextColor),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
-                        const SizedBox(height: 3),
-                        Row(children: [
-                          _TypeBadge(type: node.type, isTimeout: isTimeout),
-                          const SizedBox(width: 8),
-                          Expanded(
-                              child: Text('${node.server}:${node.port}',
-                                  style: TextStyle(
-                                      fontSize: 11, color: effectiveSubColor),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis)),
-                        ]),
-                      ],
-                    ),
-                  ),
-                  if (isTesting)
-                    const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: AppTheme.primaryColor))
-                  else if (isTimeout)
-                    const _LatencyBadge(latency: 65535)
-                  else if (latency != null && latency! > 0)
-                    _LatencyBadge(latency: latency!)
-                  else if (isConnected)
-                    GestureDetector(
-                      onTap: onTestLatency,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                            color: AppTheme.primaryColor.withValues(alpha: 15 / 255),
-                            borderRadius: BorderRadius.circular(6)),
-                        child: Text('测速',
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: AppTheme.primaryColor.withValues(alpha: 200 / 255))),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(node.name,
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: isSelected
+                                      ? AppTheme.success
+                                      : effectiveTextColor),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                          const SizedBox(height: 3),
+                          Row(children: [
+                            _TypeBadge(type: node.type, isTimeout: isTimeout),
+                            const SizedBox(width: 8),
+                            Expanded(
+                                child: Text('${node.server}:${node.port}',
+                                    style: TextStyle(
+                                        fontSize: 11, color: effectiveSubColor),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis)),
+                          ]),
+                        ],
                       ),
                     ),
-                ],
+                    if (isTesting)
+                      const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppTheme.primary))
+                    else if (isTimeout)
+                      const _LatencyBadge(latency: 65535)
+                    else if (latency != null && latency! > 0)
+                      _LatencyBadge(latency: latency!)
+                    else if (isConnected)
+                      GestureDetector(
+                        onTap: onTestLatency,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                              color:
+                                  AppTheme.primary.withValues(alpha: 15 / 255),
+                              borderRadius: BorderRadius.circular(6)),
+                          child: Text('测速',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppTheme.primary
+                                      .withValues(alpha: 200 / 255))),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+class _HoverableNodeCard extends StatefulWidget {
+  const _HoverableNodeCard({
+    required this.child,
+    required this.enabled,
+  });
+
+  final Widget child;
+  final bool enabled;
+
+  @override
+  State<_HoverableNodeCard> createState() => _HoverableNodeCardState();
+}
+
+class _HoverableNodeCardState extends State<_HoverableNodeCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: widget.enabled ? (_) => setState(() => _hovered = true) : null,
+      onExit: widget.enabled ? (_) => setState(() => _hovered = false) : null,
+      child: AnimatedScale(
+        scale: _hovered ? 1.006 : 1,
+        duration: const Duration(milliseconds: 170),
+        curve: Curves.easeOutCubic,
+        child: AnimatedSlide(
+          offset: _hovered ? const Offset(0, -0.018) : Offset.zero,
+          duration: const Duration(milliseconds: 170),
+          curve: Curves.easeOutCubic,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              boxShadow: [
+                if (_hovered)
+                  BoxShadow(
+                    color: AppTheme.primary.withValues(alpha: 0.18),
+                    blurRadius: 20,
+                    spreadRadius: -14,
+                    offset: const Offset(0, 12),
+                  ),
+              ],
+            ),
+            child: widget.child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NodeFlagBadge extends StatefulWidget {
+  const _NodeFlagBadge({
+    required this.node,
+    required this.selected,
+    required this.timeout,
+    required this.isDark,
+    required this.isConnected,
+  });
+
+  final ProxyNode node;
+  final bool selected;
+  final bool timeout;
+  final bool isDark;
+  final bool isConnected;
+
+  @override
+  State<_NodeFlagBadge> createState() => _NodeFlagBadgeState();
+}
+
+class _NodeFlagBadgeState extends State<_NodeFlagBadge> {
+  late Future<String> _countryFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCountry();
+  }
+
+  @override
+  void didUpdateWidget(covariant _NodeFlagBadge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.node.name != widget.node.name ||
+        oldWidget.node.server != widget.node.server ||
+        oldWidget.isConnected != widget.isConnected) {
+      _loadCountry();
+    }
+  }
+
+  void _loadCountry() {
+    _countryFuture = IpGeoService.instance.countryCodeForNode(
+      widget.node,
+      context.read<ClashService>(),
+      connected: widget.isConnected,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cached = IpGeoService.instance.cachedCountryForNode(widget.node);
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        FutureBuilder<String>(
+          future: _countryFuture,
+          initialData: cached,
+          builder: (context, snapshot) {
+            final countryCode = _normalizeCountry(snapshot.data ?? 'UN');
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color:
+                    widget.isDark ? const Color(0xFF080E18) : AppTheme.lightBg,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: widget.selected
+                      ? AppTheme.success.withValues(alpha: 0.9)
+                      : AppTheme.borderLight.withValues(
+                          alpha: widget.isDark ? 0.9 : 0.45,
+                        ),
+                ),
+                boxShadow: [
+                  if (widget.selected)
+                    BoxShadow(
+                      color: AppTheme.success.withValues(alpha: 0.25),
+                      blurRadius: 14,
+                      spreadRadius: -8,
+                    ),
+                ],
+              ),
+              child: ClipOval(
+                child: CustomPaint(
+                  painter: _CountryFlagPainter(countryCode),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            );
+          },
+        ),
+        if (widget.selected)
+          Positioned(
+            right: -2,
+            bottom: -2,
+            child: Container(
+              width: 14,
+              height: 14,
+              decoration: const BoxDecoration(
+                color: AppTheme.success,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_rounded,
+                size: 10,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        if (widget.timeout)
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.28),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// ignore: unused_element
+String _countryCodeForNode(ProxyNode node) {
+  const extraKeys = [
+    'country',
+    'countryCode',
+    'country-code',
+    'region',
+    'regionCode',
+    'ipCountry',
+  ];
+  for (final key in extraKeys) {
+    final value = node.extra[key]?.toString().trim().toUpperCase();
+    if (value != null && value.length == 2) return _normalizeCountry(value);
+  }
+
+  final haystack = '${node.name} ${node.server}'.toUpperCase();
+  final patterns = <String, List<String>>{
+    'HK': ['HK', 'HKG', '香港', 'HONG KONG'],
+    'SG': ['SG', 'SGP', '新加坡', 'SINGAPORE'],
+    'TW': ['TW', 'TWN', '台湾', '台灣', 'TAIWAN'],
+    'JP': ['JP', 'JPN', '日本', 'JAPAN', 'TOKYO', 'OSAKA'],
+    'US': ['US', 'USA', '美国', '美國', 'UNITED STATES', 'LOS ANGELES'],
+    'GB': ['GB', 'UK', '英国', '英國', 'UNITED KINGDOM', 'LONDON'],
+    'KR': ['KR', 'KOR', '韩国', '韓國', 'KOREA', 'SEOUL'],
+    'DE': ['DE', 'DEU', '德国', '德國', 'GERMANY'],
+    'FR': ['FR', 'FRA', '法国', '法國', 'FRANCE'],
+    'NL': ['NL', 'NLD', '荷兰', '荷蘭', 'NETHERLANDS'],
+    'CA': ['CA', 'CAN', '加拿大', 'CANADA'],
+    'AU': ['AU', 'AUS', '澳大利亚', '澳洲', 'AUSTRALIA'],
+    'IN': ['IN', 'IND', '印度', 'INDIA'],
+    'TH': ['TH', 'THA', '泰国', '泰國', 'THAILAND'],
+    'VN': ['VN', 'VNM', '越南', 'VIETNAM'],
+    'MY': ['MY', 'MYS', '马来', '馬來', 'MALAYSIA'],
+    'PH': ['PH', 'PHL', '菲律宾', '菲律賓', 'PHILIPPINES'],
+    'ID': ['ID', 'IDN', '印尼', '印度尼西亚', 'INDONESIA'],
+    'RU': ['RU', 'RUS', '俄罗斯', '俄羅斯', 'RUSSIA'],
+    'BR': ['BR', 'BRA', '巴西', 'BRAZIL'],
+  };
+
+  for (final entry in patterns.entries) {
+    for (final token in entry.value) {
+      if (RegExp('(^|[^A-Z])${RegExp.escape(token)}([^A-Z]|\$)')
+          .hasMatch(haystack)) {
+        return entry.key;
+      }
+    }
+  }
+
+  final tldMatch = RegExp(r'\.([a-z]{2})(?::\d+)?$', caseSensitive: false)
+      .firstMatch(node.server);
+  if (tldMatch != null) return _normalizeCountry(tldMatch.group(1) ?? 'UN');
+
+  return 'UN';
+}
+
+String _normalizeCountry(String code) {
+  final upper = code.toUpperCase();
+  if (upper == 'UK') return 'GB';
+  if (upper == 'EL') return 'GR';
+  return upper;
+}
+
+class _CountryFlagPainter extends CustomPainter {
+  const _CountryFlagPainter(this.countryCode);
+
+  final String countryCode;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    canvas.save();
+    canvas.clipPath(Path()..addOval(rect));
+    switch (countryCode) {
+      case 'US':
+        _horizontalStripes(canvas, rect, const [
+          Color(0xFFB22234),
+          Colors.white,
+          Color(0xFFB22234),
+          Colors.white,
+          Color(0xFFB22234),
+          Colors.white,
+          Color(0xFFB22234),
+        ]);
+        _fill(
+            canvas,
+            Rect.fromLTWH(0, 0, size.width * 0.48, size.height * 0.48),
+            const Color(0xFF3C3B6E));
+        break;
+      case 'JP':
+        _fill(canvas, rect, Colors.white);
+        canvas.drawCircle(rect.center, size.shortestSide * 0.22,
+            Paint()..color = const Color(0xFFBC002D));
+        break;
+      case 'HK':
+      case 'CN':
+        _fill(canvas, rect, const Color(0xFFDE2910));
+        _star(canvas, Offset(size.width * 0.34, size.height * 0.32),
+            size.shortestSide * 0.12, const Color(0xFFFFDE00));
+        break;
+      case 'SG':
+        _horizontalStripes(canvas, rect, const [
+          Color(0xFFEF3340),
+          Colors.white,
+        ]);
+        _crescent(canvas, Offset(size.width * 0.34, size.height * 0.28),
+            size.shortestSide * 0.12);
+        break;
+      case 'TW':
+        _fill(canvas, rect, const Color(0xFFFE0000));
+        _fill(
+            canvas,
+            Rect.fromLTWH(0, 0, size.width * 0.52, size.height * 0.52),
+            const Color(0xFF000095));
+        _star(canvas, Offset(size.width * 0.26, size.height * 0.26),
+            size.shortestSide * 0.11, Colors.white);
+        break;
+      case 'GB':
+        _fill(canvas, rect, const Color(0xFF012169));
+        _diagonal(canvas, rect, Colors.white, size.shortestSide * 0.18);
+        _cross(canvas, rect, Colors.white, size.shortestSide * 0.2);
+        _diagonal(
+            canvas, rect, const Color(0xFFC8102E), size.shortestSide * 0.08);
+        _cross(canvas, rect, const Color(0xFFC8102E), size.shortestSide * 0.1);
+        break;
+      case 'DE':
+        _horizontalStripes(canvas, rect,
+            const [Colors.black, Color(0xFFDD0000), Color(0xFFFFCE00)]);
+        break;
+      case 'FR':
+        _verticalStripes(canvas, rect,
+            const [Color(0xFF0055A4), Colors.white, Color(0xFFEF4135)]);
+        break;
+      case 'NL':
+        _horizontalStripes(canvas, rect,
+            const [Color(0xFFAE1C28), Colors.white, Color(0xFF21468B)]);
+        break;
+      case 'RU':
+        _horizontalStripes(canvas, rect,
+            const [Colors.white, Color(0xFF0039A6), Color(0xFFD52B1E)]);
+        break;
+      case 'KR':
+        _fill(canvas, rect, Colors.white);
+        canvas.drawCircle(rect.center, size.shortestSide * 0.2,
+            Paint()..color = const Color(0xFFC60C30));
+        canvas.drawArc(
+          Rect.fromCircle(center: rect.center, radius: size.shortestSide * 0.2),
+          0,
+          math.pi,
+          true,
+          Paint()..color = const Color(0xFF003478),
+        );
+        break;
+      case 'CA':
+        _verticalStripes(canvas, rect,
+            const [Color(0xFFD80621), Colors.white, Color(0xFFD80621)]);
+        _star(canvas, rect.center, size.shortestSide * 0.1,
+            const Color(0xFFD80621));
+        break;
+      case 'AU':
+        _fill(canvas, rect, const Color(0xFF00008B));
+        _star(canvas, Offset(size.width * 0.68, size.height * 0.6),
+            size.shortestSide * 0.1, Colors.white);
+        break;
+      case 'IN':
+        _horizontalStripes(canvas, rect,
+            const [Color(0xFFFF9933), Colors.white, Color(0xFF138808)]);
+        canvas.drawCircle(rect.center, size.shortestSide * 0.08,
+            Paint()..color = const Color(0xFF000080));
+        break;
+      case 'TH':
+        _horizontalStripes(canvas, rect, const [
+          Color(0xFFA51931),
+          Colors.white,
+          Color(0xFF2D2A4A),
+          Color(0xFF2D2A4A),
+          Colors.white,
+          Color(0xFFA51931),
+        ]);
+        break;
+      case 'VN':
+        _fill(canvas, rect, const Color(0xFFDA251D));
+        _star(canvas, rect.center, size.shortestSide * 0.16,
+            const Color(0xFFFFFF00));
+        break;
+      case 'MY':
+        _horizontalStripes(canvas, rect, const [
+          Color(0xFFCC0001),
+          Colors.white,
+          Color(0xFFCC0001),
+          Colors.white
+        ]);
+        _fill(canvas, Rect.fromLTWH(0, 0, size.width * 0.5, size.height * 0.5),
+            const Color(0xFF010066));
+        break;
+      case 'ID':
+        _horizontalStripes(
+            canvas, rect, const [Color(0xFFFF0000), Colors.white]);
+        break;
+      case 'BR':
+        _fill(canvas, rect, const Color(0xFF009B3A));
+        _diamond(canvas, rect, const Color(0xFFFFDF00));
+        canvas.drawCircle(rect.center, size.shortestSide * 0.12,
+            Paint()..color = const Color(0xFF002776));
+        break;
+      default:
+        _fill(canvas, rect, const Color(0xFF111827));
+        _drawCode(canvas, rect, countryCode == 'UN' ? '--' : countryCode);
+        break;
+    }
+    canvas.restore();
+  }
+
+  void _fill(Canvas canvas, Rect rect, Color color) {
+    canvas.drawRect(rect, Paint()..color = color);
+  }
+
+  void _horizontalStripes(Canvas canvas, Rect rect, List<Color> colors) {
+    final stripeHeight = rect.height / colors.length;
+    for (var i = 0; i < colors.length; i++) {
+      _fill(
+        canvas,
+        Rect.fromLTWH(rect.left, rect.top + i * stripeHeight, rect.width,
+            stripeHeight + 0.5),
+        colors[i],
+      );
+    }
+  }
+
+  void _verticalStripes(Canvas canvas, Rect rect, List<Color> colors) {
+    final stripeWidth = rect.width / colors.length;
+    for (var i = 0; i < colors.length; i++) {
+      _fill(
+        canvas,
+        Rect.fromLTWH(rect.left + i * stripeWidth, rect.top, stripeWidth + 0.5,
+            rect.height),
+        colors[i],
+      );
+    }
+  }
+
+  void _cross(Canvas canvas, Rect rect, Color color, double width) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = width
+      ..strokeCap = StrokeCap.square;
+    canvas.drawLine(Offset(rect.left, rect.center.dy),
+        Offset(rect.right, rect.center.dy), paint);
+    canvas.drawLine(Offset(rect.center.dx, rect.top),
+        Offset(rect.center.dx, rect.bottom), paint);
+  }
+
+  void _diagonal(Canvas canvas, Rect rect, Color color, double width) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = width
+      ..strokeCap = StrokeCap.square;
+    canvas.drawLine(rect.topLeft, rect.bottomRight, paint);
+    canvas.drawLine(rect.topRight, rect.bottomLeft, paint);
+  }
+
+  void _diamond(Canvas canvas, Rect rect, Color color) {
+    final path = Path()
+      ..moveTo(rect.center.dx, rect.top + rect.height * 0.18)
+      ..lineTo(rect.right - rect.width * 0.16, rect.center.dy)
+      ..lineTo(rect.center.dx, rect.bottom - rect.height * 0.18)
+      ..lineTo(rect.left + rect.width * 0.16, rect.center.dy)
+      ..close();
+    canvas.drawPath(path, Paint()..color = color);
+  }
+
+  void _star(Canvas canvas, Offset center, double radius, Color color) {
+    final path = Path();
+    for (var i = 0; i < 10; i++) {
+      final angle = -math.pi / 2 + i * math.pi / 5;
+      final r = i.isEven ? radius : radius * 0.42;
+      final point = Offset(
+          center.dx + math.cos(angle) * r, center.dy + math.sin(angle) * r);
+      if (i == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
+      }
+    }
+    path.close();
+    canvas.drawPath(path, Paint()..color = color);
+  }
+
+  void _crescent(Canvas canvas, Offset center, double radius) {
+    canvas.drawCircle(center, radius, Paint()..color = Colors.white);
+    canvas.drawCircle(Offset(center.dx + radius * 0.42, center.dy),
+        radius * 0.86, Paint()..color = const Color(0xFFEF3340));
+  }
+
+  void _drawCode(Canvas canvas, Rect rect, String code) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: code,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: rect.width);
+    painter.paint(
+        canvas, rect.center - Offset(painter.width / 2, painter.height / 2));
+  }
+
+  @override
+  bool shouldRepaint(covariant _CountryFlagPainter oldDelegate) {
+    return oldDelegate.countryCode != countryCode;
   }
 }
 
@@ -1956,14 +2542,14 @@ class _TypeBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-          color: AppTheme.primaryColor
-              .withAlpha(isTimeout ? 8 : (isDark ? 20 : 15)),
+          color: AppTheme.primary.withAlpha(isTimeout ? 8 : (isDark ? 20 : 15)),
           borderRadius: BorderRadius.circular(4)),
       child: Text(display,
           style: TextStyle(
               fontSize: 9,
               fontWeight: FontWeight.w700,
-              color: AppTheme.primaryColor.withValues(alpha: (isTimeout ? 100 : 255) / 255),
+              color: AppTheme.primary
+                  .withValues(alpha: (isTimeout ? 100 : 255) / 255),
               letterSpacing: 0.5)),
     );
   }
@@ -1978,17 +2564,18 @@ class _LatencyBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = isTimeout
-        ? AppTheme.errorColor
+        ? AppTheme.error
         : latency < 200
-            ? AppTheme.successColor
+            ? AppTheme.success
             : latency < 500
-                ? AppTheme.warningColor
-                : AppTheme.errorColor;
+                ? AppTheme.warning
+                : AppTheme.error;
     final text = isTimeout ? '超时' : '${latency}ms';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-          color: color.withValues(alpha: 15 / 255), borderRadius: BorderRadius.circular(6)),
+          color: color.withValues(alpha: 15 / 255),
+          borderRadius: BorderRadius.circular(6)),
       child: Text(text,
           style: TextStyle(
               fontSize: 11, fontWeight: FontWeight.w600, color: color)),
@@ -2011,7 +2598,7 @@ class _TutorialStep extends StatelessWidget {
           width: 26,
           height: 26,
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withValues(alpha: (isDark ? 30 : 20) / 255),
+            color: AppTheme.primary.withValues(alpha: (isDark ? 30 : 20) / 255),
             shape: BoxShape.circle,
           ),
           child: Center(
@@ -2019,7 +2606,7 @@ class _TutorialStep extends StatelessWidget {
                 style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.primaryColor)),
+                    color: AppTheme.primary)),
           ),
         ),
         const SizedBox(width: 12),
@@ -2031,9 +2618,8 @@ class _TutorialStep extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 height: 1.5,
-                color: isDark
-                    ? AppTheme.darkTextPrimary
-                    : AppTheme.lightTextPrimary,
+                color:
+                    isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
               ),
             ),
           ),

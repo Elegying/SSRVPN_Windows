@@ -5,6 +5,10 @@
 
 SSRVPN Windows 版 - 绿色免安装 VPN 客户端
 
+## 支持范围
+
+- 当前节点与路由策略明确为 **IPv4-only**，不支持 IPv6 节点、IPv6 强制代理 IP 或 IPv6 出口。
+
 ## 功能特性
 
 - 🎨 与 Android/macOS 版一致的 UI 界面
@@ -156,6 +160,32 @@ lib/
 - **Mihomo (Clash Meta)** - 代理核心
 - **system_tray** - 系统托盘
 - **window_manager** - 窗口管理
+
+## Safe Mode And Startup Logs
+
+If SSRVPN starts without a visible window or crashes immediately, run:
+
+```bat
+ssrvpn_windows.exe --safe-mode --verbose
+```
+
+The release package also includes `ssrvpn_safe_mode.bat`.
+
+Safe mode skips the tray, resets saved window placement, and disables Mihomo
+automatic initialization. Startup logs are written to:
+
+```text
+%LOCALAPPDATA%\SSRVPN\logs\startup.log
+```
+
+Native crash dumps are written to:
+
+```text
+%LOCALAPPDATA%\SSRVPN\crashes\
+```
+
+When reporting a startup crash, send `startup.log` and any `.dmp` files from
+the crashes directory.
 
 ## License
 

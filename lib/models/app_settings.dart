@@ -132,6 +132,7 @@ class AppSettings {
   static String? extractForceProxyHost(String site) {
     var value = site.trim();
     if (value.isEmpty || RegExp(r'[\s,，;；]').hasMatch(value)) return null;
+    if (value.startsWith('[') && value.contains(']')) return null;
     if (value.startsWith('*.')) value = value.substring(2);
 
     final hasScheme = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://').hasMatch(value);
@@ -147,7 +148,8 @@ class AppSettings {
   }
 
   static bool _isValidForceProxyHost(String host) {
-    if (InternetAddress.tryParse(host) != null) return true;
+    final address = InternetAddress.tryParse(host);
+    if (address != null) return address.type == InternetAddressType.IPv4;
     if (host.contains(':')) return false;
     if (RegExp(r'^\d+(?:\.\d+){3}$').hasMatch(host)) return false;
 

@@ -245,7 +245,7 @@ class _NodeEditScreenState extends State<NodeEditScreen> {
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         content: Text('保存失败：$message'),
-        backgroundColor: AppTheme.errorColor,
+        backgroundColor: AppTheme.error,
       ),
     );
   }
@@ -438,16 +438,16 @@ class _NodeEditScreenState extends State<NodeEditScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.warningColor.withValues(alpha: (isDark ? 22 : 16) / 255),
+        color: AppTheme.warning.withValues(alpha: (isDark ? 22 : 16) / 255),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.warningColor.withValues(alpha: 70 / 255)),
+        border: Border.all(color: AppTheme.warning.withValues(alpha: 70 / 255)),
       ),
       child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
             Icons.info_outline_rounded,
-            color: AppTheme.warningColor,
+            color: AppTheme.warning,
             size: 20,
           ),
           SizedBox(width: 10),
@@ -470,10 +470,10 @@ class _NodeEditScreenState extends State<NodeEditScreen> {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : Colors.white,
+        color: isDark ? AppTheme.surface : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+          color: isDark ? AppTheme.border : AppTheme.lightBorder,
         ),
       ),
       child: Column(

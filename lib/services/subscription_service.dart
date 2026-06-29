@@ -112,8 +112,8 @@ class SubscriptionService extends ChangeNotifier {
       final serialized = _serializeYamlDocument(parsed);
       await _cacheYaml(serialized);
       _rawYaml = serialized;
-      _revision++;
       _parseYaml();
+      _revision++;
       notifyListeners();
     } on YamlException catch (e) {
       throw Exception('本地订阅 YAML 解析失败：${e.message}');
@@ -556,14 +556,17 @@ class SubscriptionService extends ChangeNotifier {
   }
 
   void _parseYaml() {
-    _allNodes = [];
-    _allGroups = [];
-    if (_rawYaml == null || _rawYaml!.trim().isEmpty) return;
+    if (_rawYaml == null || _rawYaml!.trim().isEmpty) {
+      _allNodes = [];
+      _allGroups = [];
+      return;
+    }
 
     try {
       final doc = loadYaml(_rawYaml!);
       if (doc is! Map) return;
 
+      final newNodes = <ProxyNode>[];
       final proxies = doc['proxies'];
       if (proxies is List) {
         for (final proxy in proxies) {
@@ -571,7 +574,7 @@ class SubscriptionService extends ChangeNotifier {
             final name = proxy['name']?.toString() ?? 'Unknown';
             final port = int.tryParse(proxy['port']?.toString() ?? '') ?? 0;
             if (name.isEmpty || port < 1 || port > 65535) continue;
-            _allNodes.add(ProxyNode(
+            newNodes.add(ProxyNode(
               name: name,
               type: proxy['type']?.toString() ?? 'ss',
               server: proxy['server']?.toString() ?? '',
@@ -583,6 +586,7 @@ class SubscriptionService extends ChangeNotifier {
         }
       }
 
+      final newGroups = <ProxyGroup>[];
       final proxyGroups = doc['proxy-groups'];
       if (proxyGroups is List) {
         for (final group in proxyGroups) {
@@ -596,7 +600,7 @@ class SubscriptionService extends ChangeNotifier {
 
             final groupNodes = <ProxyNode>[];
             for (final proxyName in groupProxies) {
-              final node = _allNodes.firstWhere(
+              final node = newNodes.firstWhere(
                 (n) => n.name == proxyName,
                 orElse: () => ProxyNode(
                   name: proxyName,
@@ -613,7 +617,7 @@ class SubscriptionService extends ChangeNotifier {
               }
             }
 
-            _allGroups.add(ProxyGroup(
+            newGroups.add(ProxyGroup(
               name: groupName,
               type: groupType,
               nodes: groupNodes,
@@ -621,6 +625,10 @@ class SubscriptionService extends ChangeNotifier {
           }
         }
       }
+
+      // 解析成功后原子替换，避免中途失败留下半空状态
+      _allNodes = newNodes;
+      _allGroups = newGroups;
     } catch (e) {
       // YAML解析失败，保留订阅缓存中的原始数据
       debugPrint('[SubscriptionService] YAML解析失败: $e');
@@ -748,19 +756,41 @@ class SubscriptionService extends ChangeNotifier {
     if (await subsFile.exists()) {
       try {
         final content = await subsFile.readAsString();
-        final list = jsonDecode(content) as List;
+        final decoded = jsonDecode(content);
+        if (decoded is! List) {
+          throw const FormatException('subscriptions.json must be a list');
+        }
+        final list = decoded;
         _subscriptions = list
             .map((e) => Subscription.fromJson(e as Map<String, dynamic>))
             .toList();
       } catch (e) {
+        await _backupBadFile(subsFile, 'subscriptions.json parse failed: $e');
         _subscriptions = [];
       }
     }
 
     final cacheFile = File('$_cacheDir/subscription_cache.yaml');
     if (await cacheFile.exists()) {
-      _rawYaml = await cacheFile.readAsString();
-      _parseYaml();
+      try {
+        final content = await cacheFile.readAsString();
+        final parsed = loadYaml(content);
+        if (parsed != null && parsed is! Map) {
+          throw const FormatException(
+            'subscription_cache.yaml must be a YAML map',
+          );
+        }
+        _rawYaml = content;
+        _parseYaml();
+      } catch (e) {
+        await _backupBadFile(
+          cacheFile,
+          'subscription_cache.yaml parse failed: $e',
+        );
+        _rawYaml = null;
+        _allNodes = [];
+        _allGroups = [];
+      }
     }
   }
 
@@ -782,6 +812,37 @@ class SubscriptionService extends ChangeNotifier {
     try {
       final cacheFile = File('$_cacheDir/subscription_cache.yaml');
       if (await cacheFile.exists()) await cacheFile.delete();
+    } catch (_) {}
+  }
+
+  Future<void> resetLocalData() async {
+    _subscriptions = [];
+    _rawYaml = null;
+    _allNodes = [];
+    _allGroups = [];
+    _revision++;
+
+    if (_cacheDir != null) {
+      for (final name in ['subscriptions.json', 'subscription_cache.yaml']) {
+        final file = File('$_cacheDir${Platform.pathSeparator}$name');
+        try {
+          if (await file.exists()) await file.delete();
+        } catch (_) {}
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> _backupBadFile(File file, String reason) async {
+    try {
+      if (!await file.exists()) return;
+      final stamp = DateTime.now()
+          .toIso8601String()
+          .replaceAll(':', '')
+          .replaceAll('.', '');
+      final backup = File('${file.path}.bad-$stamp');
+      await file.rename(backup.path);
+      await File('${backup.path}.reason.txt').writeAsString(reason);
     } catch (_) {}
   }
 }

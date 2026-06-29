@@ -91,6 +91,8 @@ class SystemProxyService {
 Set-ItemProperty -Path \$regPath -Name ProxyEnable -Type DWord -Value 1
 Set-ItemProperty -Path \$regPath -Name ProxyServer -Type String -Value '$proxyServer'
 Set-ItemProperty -Path \$regPath -Name ProxyOverride -Type String -Value '<local>;localhost;127.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.20.*;172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;172.28.*;172.29.*;172.30.*;172.31.*;192.168.*'
+Set-ItemProperty -Path \$regPath -Name AutoDetect -Type DWord -Value 0
+Remove-ItemProperty -Path \$regPath -Name AutoConfigURL -ErrorAction SilentlyContinue
 ${_notifyWinInetScript()}
 ''';
 
@@ -153,6 +155,10 @@ $item = Get-ItemProperty -Path $regPath
   proxyServer = [string]$item.ProxyServer
   hasProxyOverride = $null -ne $item.PSObject.Properties['ProxyOverride']
   proxyOverride = [string]$item.ProxyOverride
+  hasAutoConfigUrl = $null -ne $item.PSObject.Properties['AutoConfigURL']
+  autoConfigUrl = [string]$item.AutoConfigURL
+  hasAutoDetect = $null -ne $item.PSObject.Properties['AutoDetect']
+  autoDetect = if ($null -eq $item.AutoDetect) { 0 } else { [int]$item.AutoDetect }
 } | ConvertTo-Json -Compress
 ''';
     final result = await _runPowerShell(script);
@@ -185,6 +191,17 @@ if (${snapshot.hasProxyOverride ? r'$true' : r'$false'}) {
   Set-ItemProperty -Path \$regPath -Name ProxyOverride -Type String -Value \$value
 } else {
   Remove-ItemProperty -Path \$regPath -Name ProxyOverride -ErrorAction SilentlyContinue
+}
+if (${snapshot.hasAutoConfigUrl ? r'$true' : r'$false'}) {
+  \$value = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${base64Encode(utf8.encode(snapshot.autoConfigUrl))}'))
+  Set-ItemProperty -Path \$regPath -Name AutoConfigURL -Type String -Value \$value
+} else {
+  Remove-ItemProperty -Path \$regPath -Name AutoConfigURL -ErrorAction SilentlyContinue
+}
+if (${snapshot.hasAutoDetect ? r'$true' : r'$false'}) {
+  Set-ItemProperty -Path \$regPath -Name AutoDetect -Type DWord -Value ${snapshot.autoDetect}
+} else {
+  Remove-ItemProperty -Path \$regPath -Name AutoDetect -ErrorAction SilentlyContinue
 }
 ${_notifyWinInetScript()}
 ''';
@@ -298,6 +315,10 @@ class _ProxySnapshot {
     required this.proxyServer,
     required this.hasProxyOverride,
     required this.proxyOverride,
+    required this.hasAutoConfigUrl,
+    required this.autoConfigUrl,
+    required this.hasAutoDetect,
+    required this.autoDetect,
   });
 
   final int proxyEnable;
@@ -305,6 +326,10 @@ class _ProxySnapshot {
   final String proxyServer;
   final bool hasProxyOverride;
   final String proxyOverride;
+  final bool hasAutoConfigUrl;
+  final String autoConfigUrl;
+  final bool hasAutoDetect;
+  final int autoDetect;
 
   factory _ProxySnapshot.fromJson(Map<String, dynamic> json) {
     return _ProxySnapshot(
@@ -313,6 +338,10 @@ class _ProxySnapshot {
       proxyServer: json['proxyServer'] as String? ?? '',
       hasProxyOverride: json['hasProxyOverride'] as bool? ?? false,
       proxyOverride: json['proxyOverride'] as String? ?? '',
+      hasAutoConfigUrl: json['hasAutoConfigUrl'] as bool? ?? false,
+      autoConfigUrl: json['autoConfigUrl'] as String? ?? '',
+      hasAutoDetect: json['hasAutoDetect'] as bool? ?? false,
+      autoDetect: (json['autoDetect'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -322,5 +351,9 @@ class _ProxySnapshot {
         'proxyServer': proxyServer,
         'hasProxyOverride': hasProxyOverride,
         'proxyOverride': proxyOverride,
+        'hasAutoConfigUrl': hasAutoConfigUrl,
+        'autoConfigUrl': autoConfigUrl,
+        'hasAutoDetect': hasAutoDetect,
+        'autoDetect': autoDetect,
       };
 }

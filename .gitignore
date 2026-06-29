@@ -63,3 +63,5 @@ build/
 *NSConflict*
 *sync-conflict*
 .sync-conflict-*
+SSRVPN*.zip
+SSRVPN_Windows_Release/

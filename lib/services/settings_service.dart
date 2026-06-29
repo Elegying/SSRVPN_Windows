@@ -102,9 +102,13 @@ class SettingsService extends ChangeNotifier {
     if (await file.exists()) {
       try {
         final content = await file.readAsString();
-        final json = jsonDecode(content) as Map<String, dynamic>;
-        _settings = AppSettings.fromJson(json);
+        final decoded = jsonDecode(content);
+        if (decoded is! Map<String, dynamic>) {
+          throw const FormatException('settings.json must be a JSON object');
+        }
+        _settings = AppSettings.fromJson(decoded);
       } catch (e) {
+        await _backupBadFile(file, 'settings.json parse failed: $e');
         _settings = AppSettings();
       }
     } else {
@@ -116,6 +120,19 @@ class SettingsService extends ChangeNotifier {
       _settings.apiSecret = _generateSecret();
       await save();
     }
+  }
+
+  Future<void> _backupBadFile(File file, String reason) async {
+    try {
+      if (!await file.exists()) return;
+      final stamp = DateTime.now()
+          .toIso8601String()
+          .replaceAll(':', '')
+          .replaceAll('.', '');
+      final backup = File('${file.path}.bad-$stamp');
+      await file.rename(backup.path);
+      await File('${backup.path}.reason.txt').writeAsString(reason);
+    } catch (_) {}
   }
 
   String _generateSecret() {
@@ -137,11 +154,45 @@ class SettingsService extends ChangeNotifier {
       await temp.writeAsString(settingsJson, flush: true);
       await temp.rename(file.path);
       notifyListeners();
+    }).catchError((_) {
+      // 单次保存失败后重置链，避免后续 save() 被挂接到 rejected future
+      _saveChain = Future<void>.value();
     });
     return _saveChain;
   }
 
   Future<void> flush() => _saveChain;
+
+  Future<void> resetAppData() async {
+    await flush();
+
+    final names = [
+      'settings.json',
+      'subscriptions.json',
+      'subscription_cache.yaml',
+      'config.yaml',
+      'country.mmdb',
+      'geoip.metadb',
+      'ssrvpn.log',
+      'ssrvpn.log.old',
+    ];
+
+    for (final name in names) {
+      final file = File('$_dataDir${Platform.pathSeparator}$name');
+      try {
+        if (await file.exists()) await file.delete();
+      } catch (_) {}
+    }
+
+    final tempDir = Directory('$_dataDir${Platform.pathSeparator}tmp');
+    try {
+      if (await tempDir.exists()) await tempDir.delete(recursive: true);
+    } catch (_) {}
+
+    _settings = AppSettings()..apiSecret = _generateSecret();
+    await save();
+    notifyListeners();
+  }
 
   Future<void> updateProxyPort(int port) async {
     _settings.proxyPort = port;

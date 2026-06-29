@@ -109,7 +109,7 @@ class UpdateService {
                 height: 52,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [AppTheme.primaryColor, AppTheme.accentColor],
+                    colors: [AppTheme.primary, AppTheme.accentColor],
                   ),
                   shape: BoxShape.circle,
                 ),
@@ -123,7 +123,7 @@ class UpdateService {
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                   color: isDark
-                      ? AppTheme.darkTextPrimary
+                      ? AppTheme.textPrimary
                       : AppTheme.lightTextPrimary,
                 ),
               ),
@@ -132,7 +132,7 @@ class UpdateService {
                 'v$currentVersion → v$latestVersion',
                 style: const TextStyle(
                   fontSize: 13,
-                  color: AppTheme.primaryColor,
+                  color: AppTheme.primary,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -155,7 +155,7 @@ class UpdateService {
                         fontSize: 12,
                         height: 1.5,
                         color: isDark
-                            ? AppTheme.darkTextSecondary
+                            ? AppTheme.textSecondary
                             : AppTheme.lightTextSecondary,
                       ),
                     ),
@@ -177,7 +177,7 @@ class UpdateService {
                           style: TextStyle(
                             fontSize: 14,
                             color: isDark
-                                ? AppTheme.darkTextSecondary
+                                ? AppTheme.textSecondary
                                 : AppTheme.lightTextSecondary,
                           )),
                     ),
@@ -190,7 +190,7 @@ class UpdateService {
                         openDownload(downloadUrl);
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryColor,
+                        backgroundColor: AppTheme.primary,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10)),

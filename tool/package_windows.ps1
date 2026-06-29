@@ -14,6 +14,8 @@ $zipHashPath = "$zipPath.sha256"
 
 $requiredFiles = @(
   'ssrvpn_windows.exe',
+  'ssrvpn_safe_mode.bat',
+  'SAFE_MODE_README.txt',
   'mihomo.exe',
   'flutter_windows.dll',
   'screen_retriever_windows_plugin.dll',
@@ -110,8 +112,13 @@ function Repair-WindowsPluginLinks {
   foreach ($plugin in $plugins) {
     $linkPath = Join-Path $linksDir $plugin.name
     $targetPath = $plugin.path.TrimEnd('\')
-    New-Item -ItemType SymbolicLink -Path $linkPath -Target $targetPath |
-      Out-Null
+    try {
+      New-Item -ItemType SymbolicLink -Path $linkPath -Target $targetPath `
+        -ErrorAction Stop | Out-Null
+    } catch [System.UnauthorizedAccessException] {
+      New-Item -ItemType Junction -Path $linkPath -Target $targetPath `
+        -ErrorAction Stop | Out-Null
+    }
   }
 }
 

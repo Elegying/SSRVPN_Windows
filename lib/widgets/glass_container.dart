@@ -1,17 +1,18 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 
-/// 液态玻璃效果容器 — 精简版，无背景动画，无鼠标光晕
+/// Premium Glass Container
 class GlassContainer extends StatefulWidget {
   final Widget child;
   final double borderRadius;
-  final double? blur; // null = 自适应
+  final double? blur;
   final EdgeInsetsGeometry? padding;
   final EdgeInsetsGeometry? margin;
   final double? width;
   final double? height;
-  final bool enableShadow;
   final bool enablePress;
+  final Color? bgColor;
 
   const GlassContainer({
     super.key,
@@ -22,8 +23,8 @@ class GlassContainer extends StatefulWidget {
     this.margin,
     this.width,
     this.height,
-    this.enableShadow = true,
     this.enablePress = true,
+    this.bgColor,
   });
 
   @override
@@ -38,18 +39,11 @@ class _GlassContainerState extends State<GlassContainer>
   @override
   void initState() {
     super.initState();
-    _initPressAnimation();
-  }
-
-  void _initPressAnimation() {
     if (widget.enablePress) {
       _pressCtrl = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 150),
-      );
-      _scaleAnim = Tween<double>(begin: 1.0, end: 0.97).animate(
-        CurvedAnimation(parent: _pressCtrl!, curve: Curves.easeOutCubic),
-      );
+          vsync: this, duration: const Duration(milliseconds: 100));
+      _scaleAnim = Tween(begin: 1.0, end: 0.985).animate(
+          CurvedAnimation(parent: _pressCtrl!, curve: Curves.easeOutCubic));
     }
   }
 
@@ -59,146 +53,132 @@ class _GlassContainerState extends State<GlassContainer>
     super.dispose();
   }
 
-  double _adaptiveBlur(BuildContext context) {
+  double _blur(BuildContext c) {
     if (widget.blur != null) return widget.blur!;
-    final dpr = MediaQuery.of(context).devicePixelRatio;
-    final size = MediaQuery.of(context).size;
-    final pixels = size.width * size.height * dpr * dpr;
-    if (pixels > 2000000) return 20;
-    if (pixels > 1000000) return 10;
-    return 0;
+    final dpr = MediaQuery.of(c).devicePixelRatio;
+    final pixels =
+        MediaQuery.of(c).size.width * MediaQuery.of(c).size.height * dpr * dpr;
+    return pixels > 2000000
+        ? 24
+        : pixels > 1000000
+            ? 12
+            : 0;
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final blurSigma = _adaptiveBlur(context);
+    final sigma = _blur(context);
 
-    Widget result = Container(
+    Widget card = Container(
       width: widget.width,
       height: widget.height,
       margin: widget.margin,
+      padding: widget.padding,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(widget.borderRadius),
-        boxShadow: widget.enableShadow
-            ? [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: (isDark ? 60 : 30) / 255),
-                  blurRadius: 30,
-                  offset: const Offset(0, 10),
-                  spreadRadius: -6,
-                ),
-              ]
-            : null,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(widget.borderRadius),
-        child: blurSigma > 0
-            ? BackdropFilter(
-                filter: ImageFilter.blur(
-                    sigmaX: blurSigma, sigmaY: blurSigma),
-                child: _buildGlass(isDark),
+        color: widget.bgColor ??
+            (isDark
+                ? const Color(0xFF101827).withValues(alpha: 0.74)
+                : Colors.white.withValues(alpha: 0.62)),
+        gradient: widget.bgColor == null && isDark
+            ? LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF22304A).withValues(alpha: 0.72),
+                  const Color(0xFF101827).withValues(alpha: 0.78),
+                  const Color(0xFF07101C).withValues(alpha: 0.82),
+                  AppTheme.primary.withValues(alpha: 0.08),
+                ],
+                stops: const [0.0, 0.4, 0.78, 1.0],
               )
-            : _buildGlass(isDark),
+            : LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.8),
+                  Colors.white.withValues(alpha: 0.42),
+                  AppTheme.primary.withValues(alpha: 0.08),
+                ],
+              ),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.12)
+              : Colors.white.withValues(alpha: 0.72),
+          width: 0.7,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.32 : 0.08),
+            blurRadius: 30,
+            spreadRadius: -12,
+            offset: const Offset(0, 18),
+          ),
+        ],
       ),
+      child: widget.child,
     );
 
+    if (sigma > 0) {
+      card = ClipRRect(
+        borderRadius: BorderRadius.circular(widget.borderRadius),
+        child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+            child: card),
+      );
+    }
+
     final ctrl = _pressCtrl;
-    final scaleAnim = _scaleAnim;
-    if (ctrl != null && scaleAnim != null) {
-      result = GestureDetector(
+    final anim = _scaleAnim;
+    if (ctrl != null && anim != null) {
+      card = GestureDetector(
         onTapDown: (_) => ctrl.forward(),
         onTapUp: (_) => ctrl.reverse(),
         onTapCancel: () => ctrl.reverse(),
         child: AnimatedBuilder(
           animation: ctrl,
-          builder: (context, child) {
-            return Transform.scale(
-              scale: scaleAnim.value,
-              child: child,
-            );
-          },
-          child: result,
+          builder: (_, child) =>
+              Transform.scale(scale: anim.value, child: child),
+          child: card,
         ),
       );
     }
-
-    return RepaintBoundary(child: result);
-  }
-
-  Widget _buildGlass(bool isDark) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(widget.borderRadius),
-        // 简单渐变，无动画
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [
-                  Colors.white.withValues(alpha: 12 / 255),
-                  Colors.white.withValues(alpha: 6 / 255),
-                ]
-              : [
-                  Colors.white.withValues(alpha: 40 / 255),
-                  Colors.white.withValues(alpha: 20 / 255),
-                ],
-        ),
-        border: Border.all(
-          color:
-              isDark ? Colors.white.withValues(alpha: 18 / 255) : Colors.white.withValues(alpha: 35 / 255),
-          width: 0.5,
-        ),
-      ),
-      padding: widget.padding,
-      child: widget.child,
-    );
+    return RepaintBoundary(child: card);
   }
 }
 
-/// 液态玻璃风格输入框装饰
+/// Premium input decoration
 class GlassInputDecoration extends InputDecoration {
-  final bool isDark;
-
-  GlassInputDecoration({
-    required this.isDark,
-    super.hintText,
-    super.labelText,
-    super.prefixIcon,
-  }) : super(
+  GlassInputDecoration(
+      {required bool isDark, super.hintText, super.labelText, super.prefixIcon})
+      : super(
           filled: true,
-          fillColor:
-              isDark ? Colors.white.withValues(alpha: 10 / 255) : Colors.white.withValues(alpha: 25 / 255),
+          isDense: true,
+          fillColor: isDark
+              ? Colors.white.withValues(alpha: 0.04)
+              : Colors.white.withValues(alpha: 0.5),
           contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(
-              color: Colors.white.withValues(alpha: (isDark ? 15 : 30) / 255),
-            ),
-          ),
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                  color: Colors.white.withValues(alpha: isDark ? 0.06 : 0.2))),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(
-              color: Colors.white.withValues(alpha: (isDark ? 15 : 30) / 255),
-            ),
-          ),
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                  color: Colors.white.withValues(alpha: isDark ? 0.06 : 0.2))),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(
-              color: const Color(0xFF7B68EE).withValues(alpha: 150 / 255),
-              width: 1.5,
-            ),
-          ),
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                  color: AppTheme.primary.withValues(alpha: 0.6), width: 1.5)),
           hintStyle: TextStyle(
-            color: isDark
-                ? Colors.white.withValues(alpha: 70 / 255)
-                : Colors.black.withValues(alpha: 70 / 255),
-          ),
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.35)
+                  : Colors.black.withValues(alpha: 0.35)),
           labelStyle: TextStyle(
-            color: isDark
-                ? Colors.white.withValues(alpha: 100 / 255)
-                : Colors.black.withValues(alpha: 120 / 255),
-          ),
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.5)
+                  : Colors.black.withValues(alpha: 0.5)),
         );
 }
